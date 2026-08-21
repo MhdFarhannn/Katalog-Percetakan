@@ -26,4 +26,22 @@ CREATE TABLE IF NOT EXISTS User(
   CONSTRAINT uq_provider_external UNIQUE (Auth_Provider, External_Id)
 );
 
+CREATE TABLE kategory_product (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nama VARCHAR(100) NOT NULL
+);
 
+CREATE TABLE product (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    idKategoriProduct INT NOT NULL,
+    nama VARCHAR(150) NOT NULL,
+    deskripsi TEXT,
+    imagePath VARCHAR(255),
+    harga DECIMAL(15,2) NOT NULL,
+
+    CONSTRAINT fk_product_kategory
+        FOREIGN KEY (idKategoriProduct)
+        REFERENCES kategory_product(id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+);
