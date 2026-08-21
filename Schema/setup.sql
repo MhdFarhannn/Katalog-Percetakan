@@ -56,3 +56,8 @@ CREATE TABLE status_product (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nama VARCHAR(100) NOT NULL
 );
+
+CREATE TABLE status_pengerjaan (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nama VARCHAR(100) NOT NULL
+);

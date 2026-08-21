@@ -51,6 +51,9 @@ builder.Services.AddScoped<KategoryProductServices>();
 //StatusProduct Services
 builder.Services.AddScoped<StatusProductServices>();
 
+//StatusPengerjaan Services
+builder.Services.AddScoped<StatusPengerjaanServices>();
+
 
 //JWT
 var jwtKey = builder.Configuration["Jwt:Key"]!;
@@ -148,6 +151,7 @@ app.UseSwaggerUI(c =>
 app.MapAuth();
 app.MapKategoryProduct();
 app.MapStatusProduct();
+app.MapStatusPengerjaan();
 
 app.Run();
 
