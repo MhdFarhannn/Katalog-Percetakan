@@ -1,25 +1,117 @@
 using System.Diagnostics;
+using Katalog.Services;
+using Katalog.Controller;
+using Katalog.Models;
+using System.Text.Json.Serialization;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.OpenApi.Models;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddAuthentication(options =>
+ builder.Services.AddCors(options =>
 {
-    options.DefaultScheme = CookieAuthenticationDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = GoogleDefaults.AuthenticationScheme;
-})
-.AddCookie()
-.AddGoogle(options =>
-{
-    options.ClientId = builder.Configuration["Authentication:Google:ClientId"];
-    options.ClientSecret = builder.Configuration["Authentication:Google:ClientSecret"];
-});
+    options.AddPolicy("AllowAndroid", policy =>
+    {
+        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+    });
 
+    options.AddPolicy("AllowWebFrontend", policy =>
+    {
+        policy.WithOrigins(
+                    "http://localhost:3000",   
+                    "http://localhost:5174",   
+                    "http://localhost:4200",   
+                    "https://yourdomain.com"   
+              )
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials(); 
+    });
+
+    options.AddPolicy("AllowAll", policy =>
+    {
+        policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+    });
+});
+//ENV
+Env.Value = builder.Configuration;
+//Database Services
+builder.Services.AddSingleton<Database>();
+
+//Auth Services
+builder.Services.AddAuthorization();
+builder.Services.AddSingleton<IPasswordService, PasswordService>();
+builder.Services.AddScoped<IJWTService, JWTService>();
+
+
+//JWT
+var jwtKey = builder.Configuration["Jwt:Key"]!;
+builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = builder.Configuration["Jwt:Issuer"],
+            ValidAudience = builder.Configuration["Jwt:Audience"],
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+        };
+    });
+
+builder.Services.ConfigureHttpJsonOptions(options =>
+{
+    options.SerializerOptions.Converters.Add(new JsonStringEnumConverter());
+});
+//Swagger
+
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "Percetakan",
+        Version = "v1",
+        Description = "Dokumentasi API Percetakan"
+    });
+
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "Masukkan JWT Token saja. Swagger akan otomatis menambahkan kata 'Bearer ' di depannya.",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.Http,
+        Scheme = "Bearer",
+        BearerFormat = "JWT"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+//Register Services
+
+builder.Services.AddAuthorization(Policies.Register);
+builder.Services.AddScoped<AuthServices>();
 var app = builder.Build();
 
-// setelah builder.Build():
-app.UseAuthentication();
+app.UseCors("AllowWebFrontend");
+//app.UseAuthentication();
 app.UseAuthorization();
 app.Use(async (context, next) =>
 {
@@ -41,7 +133,13 @@ app.Use(async (context, next) =>
         Console.WriteLine($"{timestamp} INFO: {ip} - \"{context.Request.Method} {context.Request.Path} {context.Response.StatusCode}\" {sw.ElapsedMilliseconds}ms");
     }
 });
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Katalog API v1");
+});
 
+app.MapAuth();
 app.Run();
 
 
