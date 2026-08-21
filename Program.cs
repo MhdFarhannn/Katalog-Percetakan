@@ -48,6 +48,9 @@ builder.Services.AddScoped<IJWTService, JWTService>();
 //KategoryProduct Services
 builder.Services.AddScoped<KategoryProductServices>();
 
+//StatusProduct Services
+builder.Services.AddScoped<StatusProductServices>();
+
 
 //JWT
 var jwtKey = builder.Configuration["Jwt:Key"]!;
@@ -144,6 +147,8 @@ app.UseSwaggerUI(c =>
 
 app.MapAuth();
 app.MapKategoryProduct();
+app.MapStatusProduct();
+
 app.Run();
 
 

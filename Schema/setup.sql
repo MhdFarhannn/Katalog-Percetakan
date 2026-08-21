@@ -34,6 +34,7 @@ CREATE TABLE kategory_product (
 CREATE TABLE product (
     id INT AUTO_INCREMENT PRIMARY KEY,
     idKategoriProduct INT NOT NULL,
+    idStatusProduct INT NOT NULL,
     nama VARCHAR(150) NOT NULL,
     deskripsi TEXT,
     imagePath VARCHAR(255),
@@ -44,4 +45,14 @@ CREATE TABLE product (
         REFERENCES kategory_product(id)
         ON UPDATE CASCADE
         ON DELETE RESTRICT
+    CONSTRAINT fk_status_product
+        FOREIGN KEY (idStatusProduct)
+        REFERENCES status_product(id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+);
+
+CREATE TABLE status_product (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nama VARCHAR(100) NOT NULL
 );

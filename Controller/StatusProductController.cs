@@ -3,18 +3,18 @@ using Katalog.Models;
 
 namespace Katalog.Controller
 {
-    public static class KategoryProductController
+    public static class StatusProductController
     {
-        public static void MapKategoryProduct(this WebApplication app)
+        public static void MapStatusProduct(this WebApplication app)
         {
-            var g = app.MapGroup("api/v1/kategory-product");
+            var g = app.MapGroup("api/v1/status-product");
             
-            //MENAMBAHKAN KATEGORY PRODUCT
-            g.MapPost("/", async (KategoryProductServices service, KategoryProduct kategoryProduct) =>
+            //MENAMBAHKAN STATUS PRODUCT
+            g.MapPost("/", async (StatusProductServices service, StatusProduct statusProduct) =>
             {
                 try
                 {
-                    await service.CreateKategoryProduct(kategoryProduct);
+                    await service.CreateStatusProduct(statusProduct);
                     return Results.Ok();
                 }
                 catch (Exception e)
@@ -23,12 +23,12 @@ namespace Katalog.Controller
                 }
             });
 
-            //MENGHAPUS KATEGORY PRODUCT
-            g.MapDelete("/{id}", async (KategoryProductServices service, int id) =>
+            //MENGHAPUS STATUS PRODUCT
+            g.MapDelete("/{id}", async (StatusProductServices service, int id) =>
             {
                 try
                 {
-                    await service.DeleteKategoryProduct(id);
+                    await service.DeleteStatusProduct(id);
                     return Results.Ok();
                 }
                 catch (Exception e)
@@ -37,12 +37,12 @@ namespace Katalog.Controller
                 }
             });
 
-            //EDIT KATEGORY PRODUCT
-            g.MapPatch("/{id}", async (KategoryProductServices service, int id, KategoryProduct kategoryProduct) =>
+            //EDIT STATUS PRODUCT
+            g.MapPatch("/{id}", async (StatusProductServices service, int id, StatusProduct statusProduct) =>
             {
                 try
                 {
-                    await service.PatchKategoryProduct(id, kategoryProduct);
+                    await service.PatchStatusProduct(id, statusProduct);
                     return Results.Ok();
                 }
                 catch (Exception e)
@@ -51,13 +51,13 @@ namespace Katalog.Controller
                 }
             });
 
-            //GET ALL KATEGORI PRODUCT
-            g.MapGet("/", async (KategoryProductServices service) =>
+            //GET ALL STATUS PRODUCT
+            g.MapGet("/", async (StatusProductServices service) =>
             {
                 try
                 {
-                    var kategoryProducts = await service.GetAllKategoryProduct();
-                    return Results.Ok(kategoryProducts);
+                    var statusProducts = await service.GetAllStatusProduct();
+                    return Results.Ok(statusProducts);
                 }
                 catch (Exception e)
                 {
