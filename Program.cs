@@ -20,14 +20,14 @@ var builder = WebApplication.CreateBuilder(args);
     options.AddPolicy("AllowWebFrontend", policy =>
     {
         policy.WithOrigins(
-                    "http://localhost:3000",   
-                    "http://localhost:5174",   
-                    "http://localhost:4200",   
-                    "https://yourdomain.com"   
+                    "http://localhost:3000",
+                    "http://localhost:5174",
+                    "http://localhost:4200",
+                    "https://yourdomain.com"
               )
               .AllowAnyMethod()
               .AllowAnyHeader()
-              .AllowCredentials(); 
+              .AllowCredentials();
     });
 
     options.AddPolicy("AllowAll", policy =>
@@ -53,6 +53,9 @@ builder.Services.AddScoped<StatusProductServices>();
 
 //StatusPengerjaan Services
 builder.Services.AddScoped<StatusPengerjaanServices>();
+
+//Product Services
+builder.Services.AddScoped<ProductServices>();
 
 
 //JWT
@@ -119,9 +122,12 @@ builder.Services.AddAuthorization(Policies.Register);
 builder.Services.AddScoped<AuthServices>();
 var app = builder.Build();
 
+app.UseStaticFiles();
+
 app.UseCors("AllowWebFrontend");
 //app.UseAuthentication();
 app.UseAuthorization();
+
 app.Use(async (context, next) =>
 {
     var sw = Stopwatch.StartNew();
@@ -152,7 +158,7 @@ app.MapAuth();
 app.MapKategoryProduct();
 app.MapStatusProduct();
 app.MapStatusPengerjaan();
+app.MapProduct();
+
 
 app.Run();
-
-

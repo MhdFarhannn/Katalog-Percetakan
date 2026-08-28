@@ -39,12 +39,14 @@ CREATE TABLE product (
     deskripsi TEXT,
     imagePath VARCHAR(255),
     harga DECIMAL(15,2) NOT NULL,
+    background_color VARCHAR(25),
+    diskon DECIMAL(15,2) NULL,
 
     CONSTRAINT fk_product_kategory
         FOREIGN KEY (idKategoriProduct)
         REFERENCES kategory_product(id)
         ON UPDATE CASCADE
-        ON DELETE RESTRICT
+        ON DELETE RESTRICT,
     CONSTRAINT fk_status_product
         FOREIGN KEY (idStatusProduct)
         REFERENCES status_product(id)
