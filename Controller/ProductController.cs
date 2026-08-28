@@ -1,5 +1,6 @@
 using Katalog.Services;
 using Katalog.Models;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Katalog.Controller
 {
@@ -13,50 +14,37 @@ namespace Katalog.Controller
             g.MapPost("/", async (
                 ProductServices service,
                 IWebHostEnvironment environment,
-                int IdKategoriProduct,
-                int IdStatusProduct,
-                string Nama,
-                string? Deskripsi,
-                decimal Harga,
-                string? BackgroundColor,
+                [FromForm] int IdKategoriProduct,
+                [FromForm] int IdStatusProduct,
+                [FromForm] string Nama,
+                [FromForm] string? Deskripsi,
+                [FromForm] decimal Harga,
+                [FromForm] string? BackgroundColor,
                 IFormFile? Image) =>
             {
                 try
                 {
                     string? imagePath = null;
-
+            
                     if (Image != null)
                     {
                         var extension = Path.GetExtension(Image.FileName);
-
-                        var fileName =
-                            Guid.NewGuid().ToString() + extension;
-
-                        var folderPath = Path.Combine(
-                            environment.WebRootPath,
-                            "images"
-                        );
-
+                        var fileName = Guid.NewGuid().ToString() + extension;
+                        var folderPath = Path.Combine(environment.WebRootPath, "images");
+            
                         if (!Directory.Exists(folderPath))
                         {
                             Directory.CreateDirectory(folderPath);
                         }
-
-                        var filePath = Path.Combine(
-                            folderPath,
-                            fileName
-                        );
-
-                        using var stream = new FileStream(
-                            filePath,
-                            FileMode.Create
-                        );
-
+            
+                        var filePath = Path.Combine(folderPath, fileName);
+            
+                        using var stream = new FileStream(filePath, FileMode.Create);
                         await Image.CopyToAsync(stream);
-
+            
                         imagePath = "/images/" + fileName;
                     }
-
+            
                     var product = new Product
                     {
                         IdKategoriProduct = IdKategoriProduct,
@@ -68,14 +56,13 @@ namespace Katalog.Controller
                         BackgroundColor = BackgroundColor
                     };
                     
-                    var result =
-                        await service.AddProductAsync(product);
-
+                    var result = await service.AddProductAsync(product);
+            
                     if (!result)
                     {
                         return Results.BadRequest();
                     }
-
+            
                     return Results.Ok(product);
                 }
                 catch (Exception e)
@@ -86,7 +73,7 @@ namespace Katalog.Controller
                         detail: e.Message
                     );
                 }
-            }).DisableAntiforgery();
+            }).DisableAntiforgery().RequireAuthorization(Policies.Admin);
 
 
             // GET ALL PRODUCT
