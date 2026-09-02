@@ -98,5 +98,41 @@ namespace Katalog.Services
             return await conn.QueryFirstOrDefaultAsync<User>(sql, data);
         }
 
+
+
+            // GET CURRENT USER
+            public async Task<AuthMeResponse?> GetMeAsync(int idUser)
+            {
+                using var conn = db.connect();
+
+                const string query = @"
+                        SELECT
+                            u.Id AS Id,
+                            u.Nama AS Nama,
+                            u.Id_Role AS IdRole,
+                            r.Nama AS Role,
+                            u.Email AS Email,
+                            u.Auth_Provider AS AuthProvider,
+                            u.Is_Active AS IsActive
+                        FROM User u
+                        LEFT JOIN Roles r
+                            ON u.Id_Role = r.Id
+                        WHERE u.Id = @IdUser
+                        LIMIT 1
+                    ";
+
+                var result = await conn.QueryFirstOrDefaultAsync<AuthMeResponse>(
+                    query,
+                    new
+                    {
+                        IdUser = idUser
+                    }
+                );
+
+                return result;
+            }
+        
+    
+
     }//Class
 }//Namespace

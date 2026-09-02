@@ -10,7 +10,7 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
- builder.Services.AddCors(options =>
+builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAndroid", policy =>
     {
@@ -23,7 +23,8 @@ var builder = WebApplication.CreateBuilder(args);
                     "http://localhost:3000",
                     "http://localhost:5174",
                     "http://localhost:4200",
-                    "https://yourdomain.com"
+                    "https://yourdomain.com",
+                    "http://127.0.0.1:5174"
               )
               .AllowAnyMethod()
               .AllowAnyHeader()
@@ -56,6 +57,12 @@ builder.Services.AddScoped<StatusPengerjaanServices>();
 
 //Product Services
 builder.Services.AddScoped<ProductServices>();
+
+//Alamat Services
+builder.Services.AddScoped<AlamatServices>();
+
+//Layanan Services
+builder.Services.AddScoped<LayananServices>();
 
 
 //JWT
@@ -159,6 +166,8 @@ app.MapKategoryProduct();
 app.MapStatusProduct();
 app.MapStatusPengerjaan();
 app.MapProduct();
+app.MapAlamat();
+app.MapLayanan();
 
 
 app.Run();

@@ -97,32 +97,32 @@ namespace Katalog.Controller
                 }
             });
 
-            // GET PRODUCT BY ID
-            g.MapGet("/{id}", async (
-                ProductServices service,
-                int id) =>
-            {
-                try
-                {
-                    var product =
-                        await service.GetProductByIdAsync(id);
+            // // GET PRODUCT BY ID
+            // g.MapGet("/{id}", async (
+            //     ProductServices service,
+            //     int id) =>
+            // {
+            //     try
+            //     {
+            //         var product =
+            //             await service.GetProductByIdAsync(id);
 
-                    if (product == null)
-                    {
-                        return Results.NotFound();
-                    }
+            //         if (product == null)
+            //         {
+            //             return Results.NotFound();
+            //         }
 
-                    return Results.Ok(product);
-                }
-                catch (Exception e)
-                {
-                    return Results.Problem(
-                        title: "Internal Server Error",
-                        statusCode: 500,
-                        detail: e.Message
-                    );
-                }
-            });
+            //         return Results.Ok(product);
+            //     }
+            //     catch (Exception e)
+            //     {
+            //         return Results.Problem(
+            //             title: "Internal Server Error",
+            //             statusCode: 500,
+            //             detail: e.Message
+            //         );
+            //     }
+            // });
 
             // EDIT PRODUCT
             g.MapPut("/{id}", async (

@@ -16,6 +16,13 @@ namespace Katalog.Models
 
         public decimal Harga { get; set; }
 
+        public decimal Diskon { get; set; }
+        
+
         public string? BackgroundColor { get; set; }
+
+        public KategoryProduct? KategoryProduct { get; set; }
+
+        public StatusProduct? StatusProduct { get; set; }
     }
 }

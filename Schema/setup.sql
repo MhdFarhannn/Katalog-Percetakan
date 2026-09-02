@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS User(
   CONSTRAINT uq_provider_external UNIQUE (Auth_Provider, External_Id)
 );
 
+
 CREATE TABLE kategory_product (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nama VARCHAR(100) NOT NULL
@@ -63,3 +64,25 @@ CREATE TABLE status_pengerjaan (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nama VARCHAR(100) NOT NULL
 );
+
+CREATE TABLE Alamat (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    idUser INT NOT NULL,
+    content TEXT NOT NULL,
+    CONSTRAINT fk_alamat_user
+        FOREIGN KEY (idUser)
+        REFERENCES User(id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
+);
+
+ALTER TABLE Alamat ADD COLUMN no_telepon VARCHAR(20) NULL;
+
+CREATE TABLE layanan (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nama VARCHAR(100) NOT NULL,
+    deskripsi TEXT,
+    imagePath VARCHAR(255),
+    background_color VARCHAR(25),
+);
+

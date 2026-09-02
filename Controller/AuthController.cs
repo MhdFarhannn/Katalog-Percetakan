@@ -1,5 +1,7 @@
 using Katalog.Services;
 using Katalog.Models;
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
 
 namespace Katalog.Controller
 {
@@ -107,6 +109,43 @@ namespace Katalog.Controller
                 {
                     return Results.InternalServerError(e.Message);
                 }
+            });
+            g.MapGet("/me", async (
+                AuthServices service,
+                HttpContext httpContext) =>
+            {
+                var idUserClaim =
+                    httpContext.User.FindFirst(
+                        JwtRegisteredClaimNames.Sub
+                    )
+                    ??
+                    httpContext.User.FindFirst(
+                        ClaimTypes.NameIdentifier
+                    );
+            
+                if (idUserClaim == null)
+                {
+                    return Results.Unauthorized();
+                }
+            
+                if (!int.TryParse(
+                    idUserClaim.Value,
+                    out var idUser))
+                {
+                    return Results.Unauthorized();
+                }
+            
+                var result = await service.GetMeAsync(idUser);
+            
+                if (result == null)
+                {
+                    return Results.NotFound(new
+                    {
+                        message = "User tidak ditemukan"
+                    });
+                }
+            
+                return Results.Ok(result);
             });
 
         }
