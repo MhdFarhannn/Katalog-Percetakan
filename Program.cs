@@ -64,6 +64,13 @@ builder.Services.AddScoped<AlamatServices>();
 //Layanan Services
 builder.Services.AddScoped<LayananServices>();
 
+//Pesanan Services
+builder.Services.AddScoped<PesananServices>();
+
+//Midtrans & Payment Services
+builder.Services.AddHttpClient<MidtransService>();
+builder.Services.AddScoped<PaymentServices>();
+
 
 //JWT
 var jwtKey = builder.Configuration["Jwt:Key"]!;
@@ -168,6 +175,8 @@ app.MapStatusPengerjaan();
 app.MapProduct();
 app.MapAlamat();
 app.MapLayanan();
+app.MapPesanan();
+app.MapPayment();
 
 
 app.Run();

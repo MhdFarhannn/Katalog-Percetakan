@@ -8,6 +8,7 @@ namespace Katalog.Models
         public const string Admin = "Admin";
         public const string Petugas = "Petugas";
         public const string Pelanggan = "Pelanggan";
+        public const string AdminPetugas = "AdminPetugas";
         public const string AdminPetugasPelanggan = "AdminPetugasPelanggan";
 
         public static void Register(AuthorizationOptions options)
@@ -15,6 +16,7 @@ namespace Katalog.Models
             options.AddPolicy(Admin, p => p.RequireRole("Admin"));
             options.AddPolicy(Petugas, p => p.RequireRole("Petugas"));
             options.AddPolicy(Pelanggan, p => p.RequireRole("Pelanggan"));
+            options.AddPolicy(AdminPetugas, p => p.RequireRole("Admin", "Petugas"));
             options.AddPolicy(AdminPetugasPelanggan, p => p.RequireRole("Admin", "Petugas", "Pelanggan"));
         }
 
