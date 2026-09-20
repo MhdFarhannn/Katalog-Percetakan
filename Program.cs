@@ -24,7 +24,9 @@ builder.Services.AddCors(options =>
                     "http://localhost:5174",
                     "http://localhost:4200",
                     "https://yourdomain.com",
-                    "http://127.0.0.1:5174"
+                    "http://127.0.0.1:5174",
+                    "http://100.77.23.34:5174",
+                    "http://fyonietz.tail45709d.ts.net:5174"
               )
               .AllowAnyMethod()
               .AllowAnyHeader()
@@ -167,7 +169,7 @@ app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "Katalog API v1");
 });
-
+app.MapGet("/api/v1/health", () => "Server running");
 app.MapAuth();
 app.MapKategoryProduct();
 app.MapStatusProduct();
