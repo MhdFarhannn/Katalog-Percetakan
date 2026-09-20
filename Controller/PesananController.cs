@@ -131,27 +131,28 @@ namespace Katalog.Controller
             //
             // POST /api/v1/pesanan
             //
-            // Body:
-            // {
-            //     "idAlamat": 1,
-            //     "items": [
-            //         {
-            //             "idProduct": 1,
-            //             "idUkuranProduk": null,
-            //             "ukuranCustom": "A3",
-            //             "qty": 2,
-            //             "notes": "Cetak warna",
-            //             "desainText": "Selamat Ulang Tahun"
-            //         }
-            //     ]
-            // }
+            // Content-Type: multipart/form-data (WAJIB, bukan JSON).
+            // Setiap parameter dikirim sebagai form field terpisah:
+            //
+            // idAlamat: 1
+            // items[0].idProduct: 1
+            // items[0].idUkuranProduk:
+            // items[0].ukuranCustom: A3
+            // items[0].qty: 2
+            // items[0].notes: Cetak warna
+            // items[0].desain: (file, opsional)
+            // items[0].desainText: Selamat Ulang Tahun
+            //
+            // File desain dikirim sebagai multipart file field
+            // items[N].desain, BUKAN Base64 / JSON. Boundary dibuat
+            // otomatis oleh HTTP client/library.
             //
             // idUser DIAMBIL DARI JWT, bukan dari body.
             // =========================================================
 
             pesanan.MapPost("/", async (
                 PesananServices service,
-                PesananRequest request,
+                IWebHostEnvironment environment,
                 HttpContext httpContext) =>
             {
                 try
@@ -162,6 +163,21 @@ namespace Katalog.Controller
                     {
                         return Results.Unauthorized();
                     }
+
+                    // Endpoint ini HANYA menerima multipart/form-data.
+                    var request = await ParsePesananFormAsync(httpContext);
+
+                    if (request == null)
+                    {
+                        return Results.BadRequest(new
+                        {
+                            message = "Content-Type harus multipart/form-data"
+                        });
+                    }
+
+                    await SaveDesainFilesAsync(
+                        environment,
+                        request.Items);
 
                     var validation = await ValidateAsync(
                         service,
@@ -195,20 +211,23 @@ namespace Katalog.Controller
                         detail: e.Message
                     );
                 }
-            });
+            }).DisableAntiforgery();
 
             // =========================================================
             // UPDATE PESANAN
             //
             // PUT /api/v1/pesanan/{id}
             //
+            // Content-Type: multipart/form-data (WAJIB, bukan JSON).
+            // Field form sama seperti POST /api/v1/pesanan.
+            //
             // Hanya pemilik dan hanya jika belum ada pembayaran.
             // =========================================================
 
             pesanan.MapPut("/{id}", async (
                 PesananServices service,
+                IWebHostEnvironment environment,
                 int id,
-                PesananRequest request,
                 HttpContext httpContext) =>
             {
                 try
@@ -219,6 +238,21 @@ namespace Katalog.Controller
                     {
                         return Results.Unauthorized();
                     }
+
+                    // Endpoint ini HANYA menerima multipart/form-data.
+                    var request = await ParsePesananFormAsync(httpContext);
+
+                    if (request == null)
+                    {
+                        return Results.BadRequest(new
+                        {
+                            message = "Content-Type harus multipart/form-data"
+                        });
+                    }
+
+                    await SaveDesainFilesAsync(
+                        environment,
+                        request.Items);
 
                     var validation = await ValidateAsync(
                         service,
@@ -253,7 +287,7 @@ namespace Katalog.Controller
                         detail: e.Message
                     );
                 }
-            });
+            }).DisableAntiforgery();
 
             // =========================================================
             // DELETE PESANAN
@@ -414,6 +448,133 @@ namespace Katalog.Controller
             }
 
             return idUser;
+        }
+
+        // =========================================================
+        // MULTIPART FORM PARSING
+        //
+        // POST/PUT /api/v1/pesanan HANYA menerima multipart/form-data.
+        // JSON TIDAK diterima. Setiap parameter dikirim sebagai form
+        // field terpisah dengan nama yang sama seperti di
+        // PesananRequest:
+        //
+        //   idAlamat, items[N].idProduct, items[N].idUkuranProduk,
+        //   items[N].ukuranCustom, items[N].qty, items[N].notes,
+        //   items[N].desainText
+        //
+        // File desain dikirim sebagai multipart file field
+        // items[N].desain (bukan Base64, bukan JSON).
+        // Boundary TIDAK diset manual — dibuat otomatis oleh
+        // HTTP client/library.
+        // =========================================================
+        private const int MaxItems = 50;
+
+        private static async Task<PesananRequest?> ParsePesananFormAsync(
+            HttpContext httpContext)
+        {
+            if (!httpContext.Request.HasFormContentType)
+            {
+                return null;
+            }
+
+            var form =
+                await httpContext.Request.ReadFormAsync();
+
+            var request = new PesananRequest
+            {
+                IdAlamat = ParseInt(form["idAlamat"]) ?? 0,
+                Items = new List<PesananDetailRequest>()
+            };
+
+            // Item diindex mulai dari 0:
+            // items[0].idProduct, items[1].qty, dst.
+            for (var i = 0; i < MaxItems; i++)
+            {
+                var prefix = $"items[{i}].";
+
+                var idProduct =
+                    ParseInt(form[$"{prefix}idProduct"]);
+
+                // Tidak ada field items[i].idProduct =
+                // item terakhir sudah tercapai.
+                if (idProduct == null)
+                {
+                    break;
+                }
+
+                var item = new PesananDetailRequest
+                {
+                    IdProduct = idProduct.Value,
+                    IdUkuranProduk =
+                        ParseInt(form[$"{prefix}idUkuranProduk"]),
+                    UkuranCustom =
+                        form[$"{prefix}ukuranCustom"],
+                    Qty = ParseInt(form[$"{prefix}qty"]) ?? 0,
+                    Notes = form[$"{prefix}notes"],
+                    DesainText = form[$"{prefix}desainText"]
+                };
+
+                item.Desain =
+                    form.Files.GetFile($"{prefix}desain");
+
+                request.Items.Add(item);
+            }
+
+            return request;
+        }
+
+        private static int? ParseInt(string? value)
+        {
+            return int.TryParse(value, out var result)
+                ? result
+                : null;
+        }
+
+        // =========================================================
+        // SIMPAN FILE DESAIN
+        //
+        // File multipart (items[N].desain) disimpan ke
+        // wwwroot/images/desain, lalu path-nya diset ke
+        // item.DesainFilePath.
+        // Desain TIDAK diterima sebagai Base64 / JSON.
+        // =========================================================
+        private static async Task SaveDesainFilesAsync(
+            IWebHostEnvironment environment,
+            List<PesananDetailRequest> items)
+        {
+            foreach (var item in items)
+            {
+                var desain = item.Desain;
+
+                if (desain == null || desain.Length == 0)
+                {
+                    continue;
+                }
+
+                var folderPath = Path.Combine(
+                    environment.WebRootPath,
+                    "images",
+                    "desain");
+
+                if (!Directory.Exists(folderPath))
+                {
+                    Directory.CreateDirectory(folderPath);
+                }
+
+                var fileName =
+                    Guid.NewGuid().ToString()
+                    + Path.GetExtension(desain.FileName);
+
+                var filePath = Path.Combine(folderPath, fileName);
+
+                await using var stream =
+                    new FileStream(filePath, FileMode.Create);
+
+                await desain.CopyToAsync(stream);
+
+                item.DesainFilePath =
+                    "/images/desain/" + fileName;
+            }
         }
     }
 }

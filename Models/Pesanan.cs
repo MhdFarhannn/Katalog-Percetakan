@@ -37,6 +37,11 @@ namespace Katalog.Models
         public string? DesainFilePath { get; set; }
 
         public string? DesainText { get; set; }
+
+        // File desain dikirim sebagai multipart file field
+        // (items[N].desain), BUKAN Base64 / JSON. Diisi dari form,
+        // disimpan server, lalu dipetakan ke DesainFilePath.
+        public IFormFile? Desain { get; set; }
     }
 
     public class PesananResponse

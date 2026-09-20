@@ -43,9 +43,17 @@ Authorization: Bearer <token>
 
 - Request body JSON memakai **camelCase** (binding juga menerima PascalCase).
 - Endpoint upload gambar memakai **multipart/form-data**.
+- **POST** dan **PUT** `/api/v1/pesanan` (order) juga **wajib** memakai
+  **`multipart/form-data`** — JANGAN kirim JSON ke endpoint ini. Kirim setiap
+  parameter sebagai form field terpisah (lihat [pesanan.md](pesanan.md)).
+  File desain dikirim sebagai multipart file field, bukan Base64.
 
 ```http
 Content-Type: application/json
+```
+
+```http
+Content-Type: multipart/form-data
 ```
 
 ## Format Response & Error

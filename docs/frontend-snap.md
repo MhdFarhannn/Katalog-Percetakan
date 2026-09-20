@@ -70,6 +70,12 @@ function authHeaders(json = true) {
   return h;
 }
 
+// Endpoint POST/PUT /api/v1/pesanan WAJIB multipart/form-data:
+// JANGAN set Content-Type di header — FormData membuat boundary otomatis.
+function authHeadersForm() {
+  return { Authorization: `Bearer ${getToken()}` };
+}
+
 // 1) Login
 async function login(email, password) {
   const res = await fetch(`${API}/api/v1/auth/login`, {
@@ -83,12 +89,28 @@ async function login(email, password) {
   return data;
 }
 
-// 2) Buat pesanan
+// 2) Buat pesanan — multipart/form-data (BUKAN JSON)
 async function createPesanan(idAlamat, items) {
+  const form = new FormData();
+  form.append("idAlamat", String(idAlamat));
+
+  items.forEach((item, i) => {
+    form.append(`items[${i}].idProduct`, String(item.idProduct));
+    form.append(`items[${i}].qty`, String(item.qty));
+    if (item.idUkuranProduk != null)
+      form.append(`items[${i}].idUkuranProduk`, String(item.idUkuranProduk));
+    if (item.ukuranCustom)
+      form.append(`items[${i}].ukuranCustom`, item.ukuranCustom);
+    if (item.notes) form.append(`items[${i}].notes`, item.notes);
+    if (item.desain) form.append(`items[${i}].desain`, item.desain); // file, bukan Base64
+    if (item.desainText)
+      form.append(`items[${i}].desainText`, item.desainText);
+  });
+
   const res = await fetch(`${API}/api/v1/pesanan`, {
     method: "POST",
-    headers: authHeaders(),
-    body: JSON.stringify({ idAlamat, items }),
+    headers: authHeadersForm(), // TANPA Content-Type — boundary dibuat otomatis
+    body: form, // BUKAN JSON.stringify
   });
   if (!res.ok) throw new Error((await res.json()).message);
   return res.json(); // { id, totalHarga, ... }
