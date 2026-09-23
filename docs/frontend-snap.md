@@ -53,6 +53,7 @@ window.snap.pay(snapToken)    → pelanggan bayar
 Backend menerima webhook Midtrans
    ↓
 Polling GET /api/v1/payment/pesanan/{id} → paymentStatus = "paid"
+   (atau refresh GET /api/v1/pesanan → paymentStatus = "paid")
 ```
 
 Jika pelanggan tidak jadi membayar, panggil
@@ -213,7 +214,10 @@ secara end-to-end:
 
 Tanpa tunnel, `paymentStatus` tetap ter-update saat frontend polling, karena
 backend menarik status terakhir dari Midtrans di endpoint
-`GET /api/v1/payment/pesanan/{idPesanan}`. Webhook tetap disarankan agar status
+`GET /api/v1/payment/pesanan/{idPesanan}` — dan juga saat daftar pesanan
+dibaca (`GET /api/v1/pesanan`, `GET /api/v1/pesanan/all`,
+`GET /api/v1/pesanan/{id}`). Jadi halaman riwayat pesanan cukup di-refresh
+untuk melihat status `paid` terbaru. Webhook tetap disarankan agar status
 berubah tanpa menunggu polling (atau gunakan **Resend notification** dari
 dashboard Midtrans).
 

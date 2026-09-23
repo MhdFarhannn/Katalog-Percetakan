@@ -2,6 +2,10 @@
 
 Base path: `/api/v1/payment`
 
+> Semua endpoint di sini hanya untuk **pemilik pesanan** (idUser dari JWT),
+> termasuk admin/petugas. Lihat [admin.md](admin.md#4-yang-tidak-bisa-dilakukan-admin)
+> dan [pelanggan.md](pelanggan.md#3-alur-utama).
+
 | Method | Endpoint | Auth | Keterangan |
 |---|---|---|---|
 | POST | `/api/v1/payment/{idPesanan}` | Bearer (pemilik) | Buat transaksi Snap, kembalikan token |
@@ -137,6 +141,9 @@ Mengembalikan pembayaran terbaru untuk pesanan milik user.
   jadi tetap ter-update walau notifikasi webhook belum atau tidak sampai.
 - Bila Midtrans tidak dapat dihubungi, response tetap `200` dengan status yang
   tersimpan di database (polling tidak ikut gagal).
+- Sinkronisasi yang sama juga dijalankan oleh endpoint pesanan
+  (`GET /api/v1/pesanan`, `GET /api/v1/pesanan/all`, `GET /api/v1/pesanan/{id}`),
+  karena frontend umumnya memantau status pembayaran dari daftar pesanan.
 
 **Response 200** — `PaymentResponse` (tanpa `redirectUrl`).
 
@@ -231,6 +238,13 @@ frontend harus melakukan **polling** ke endpoint status sampai `paymentStatus`
 menjadi `paid` (lihat [frontend-snap.md](frontend-snap.md)).
 
 > Webhook adalah jalur utama, tetapi bukan satu-satunya: setiap polling ke
-> `GET /api/v1/payment/pesanan/{idPesanan}` juga menyinkronkan status terakhir
-> dari Midtrans untuk pembayaran yang masih `pending`. Jadi status tetap berubah
-> bila URL notifikasi belum dikonfigurasi (mis. server lokal tanpa tunnel).
+> `GET /api/v1/payment/pesanan/{idPesanan}` **dan** setiap pembacaan pesanan
+> (`GET /api/v1/pesanan`, `GET /api/v1/pesanan/all`, `GET /api/v1/pesanan/{id}`)
+> juga menyinkronkan status terakhir dari Midtrans untuk pembayaran yang masih
+> `pending`. Jadi status tetap berubah bila URL notifikasi belum dikonfigurasi
+> (mis. server lokal tanpa tunnel) atau bila frontend hanya me-refresh daftar
+> pesanan.
+>
+> Sinkronisasi hanya menyentuh pembayaran terakhir yang masih `pending` dan
+> sudah punya Snap token, jadi pembayaran yang sudah final tidak menambah
+> permintaan ke Midtrans.

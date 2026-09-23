@@ -3,6 +3,9 @@
 Base path: `/api/v1/pesanan` — semua endpoint **butuh Bearer token**.
 `idUser` diambil dari JWT, bukan dari body.
 
+> Endpoint mana yang dipakai frontend admin dan mana yang dipakai pelanggan:
+> lihat [admin.md](admin.md) dan [pelanggan.md](pelanggan.md).
+
 > **Aturan untuk AI Agent:** endpoint **POST** dan **PUT** pesanan **wajib**
 > memakai **`Content-Type: multipart/form-data`**. **JANGAN PERNAH** mengirim
 > body JSON dan **JANGAN** memakai `Content-Type: application/json` untuk
@@ -138,6 +141,14 @@ Nilai tersebut diambil dari `payments.idStatusPayment` pembayaran terakhir
 pesanan (JOIN ke tabel master `status_payment`), lalu kodenya dipetakan di
 C# lewat `PaymentStatusMap`. Pesanan yang belum punya baris di `payments`
 tetap `unpaid`.
+
+Ketiga endpoint pembacaan (`GET /api/v1/pesanan`, `GET /api/v1/pesanan/all`,
+`GET /api/v1/pesanan/{id}`) sekaligus menyinkronkan pembayaran yang masih
+`pending` ke Midtrans (`GET /v2/{order_id}/status`) sebelum response dikirim.
+Jadi status pesanan yang baru dibayar langsung berubah menjadi `paid` pada
+refresh berikutnya, tanpa menunggu notifikasi webhook. Bila Midtrans tidak
+dapat dihubungi, daftar pesanan tetap dikembalikan dengan status yang tersimpan
+di database.
 
 `statusPengerjaan` bernilai `Sedang Berlangsung`, atau `Dibatalkan` bila
 pembayaran pesanan dibatalkan oleh pelanggan atau kedaluwarsa (lihat

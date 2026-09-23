@@ -273,7 +273,7 @@ namespace Katalog.Services
             // jadi status terakhir ikut disinkronkan dari Midtrans.
             // Dengan begitu status tetap berubah walau notifikasi
             // webhook belum / tidak sampai ke server.
-            await SyncPaymentStatusAsync(conn, payment);
+            await SyncPaymentStatusAsync(payment);
 
             return BuildPaymentResponse(payment);
         }
@@ -286,9 +286,7 @@ namespace Katalog.Services
         // GET /v2/{order_id}/status lalu disimpan dengan alur yang
         // sama seperti notifikasi webhook.
         // =========================================================
-        private async Task SyncPaymentStatusAsync(
-            MySql.Data.MySqlClient.MySqlConnection conn,
-            Payment payment)
+        private async Task SyncPaymentStatusAsync(Payment payment)
         {
             if (payment.IdStatusPayment
                     != PaymentStatusMap.MenungguPembayaran
@@ -332,17 +330,33 @@ namespace Katalog.Services
                 return;
             }
 
-            await conn.OpenAsync();
-            using var transaction = conn.BeginTransaction();
+            try
+            {
+                using var conn = db.connect();
 
-            await ApplyPaymentStatusAsync(
-                conn,
-                transaction,
-                payment,
-                mappedStatus,
-                status);
+                await conn.OpenAsync();
+                using var transaction = conn.BeginTransaction();
 
-            transaction.Commit();
+                await ApplyPaymentStatusAsync(
+                    conn,
+                    transaction,
+                    payment,
+                    mappedStatus,
+                    status);
+
+                transaction.Commit();
+            }
+            catch (Exception e)
+            {
+                // Status gagal disimpan: response tetap memakai
+                // status yang tersimpan di database.
+                logger.LogWarning(
+                    "Status order {OrderId} gagal disimpan: {Message}",
+                    payment.MidtransOrderId,
+                    e.Message);
+
+                return;
+            }
 
             payment.IdStatusPayment = PaymentStatusMap.ToId(mappedStatus);
 
@@ -350,6 +364,83 @@ namespace Katalog.Services
                 "Status Pesanan {IdPesanan} disinkronkan dari Midtrans menjadi {Status}",
                 payment.IdPesanan,
                 mappedStatus);
+        }
+
+        // =========================================================
+        // SINKRONISASI SEMUA PEMBAYARAN YANG MASIH MENUNGGU
+        //
+        // Dipakai endpoint Pesanan, karena frontend memantau
+        // status pembayaran lewat daftar / detail pesanan, bukan
+        // hanya lewat endpoint payment.
+        //
+        // Hanya pembayaran terakhir yang masih MENUNGGU PEMBAYARAN
+        // dan sudah punya Snap token yang ditarik ke Midtrans,
+        // sehingga pembayaran yang sudah final tidak diproses.
+        //
+        // Mengembalikan idStatusPayment terbaru per idPesanan.
+        // =========================================================
+        public async Task<Dictionary<int, int>> SyncPendingPaymentsAsync(
+            IEnumerable<int> idPesananList)
+        {
+            var result = new Dictionary<int, int>();
+
+            var ids = idPesananList.Distinct().ToList();
+
+            if (ids.Count == 0)
+            {
+                return result;
+            }
+
+            using var conn = db.connect();
+
+            const string query = @"
+                SELECT
+                    p.id AS Id,
+                    p.idPesanan AS IdPesanan,
+                    p.idStatusPayment AS IdStatusPayment,
+                    p.midtrans_order_id AS MidtransOrderId,
+                    p.snap_token AS SnapToken,
+                    p.gross_amount AS GrossAmount
+                FROM payments p
+                INNER JOIN
+                (
+                    -- pembayaran terakhir per pesanan
+                    SELECT idPesanan, MAX(id) AS Id
+                    FROM payments
+                    WHERE
+                        idPesanan IN @Ids
+                        AND idStatusPayment = @IdStatusPayment
+                        AND snap_token IS NOT NULL
+                    GROUP BY idPesanan
+                ) terakhir
+                    ON terakhir.Id = p.id;";
+
+            var payments = (await conn.QueryAsync<Payment>(
+                query,
+                new
+                {
+                    Ids = ids,
+                    IdStatusPayment =
+                        PaymentStatusMap.MenungguPembayaran
+                }))
+                .ToList();
+
+            if (payments.Count == 0)
+            {
+                return result;
+            }
+
+            // Status ditarik paralel agar daftar pesanan tidak
+            // menunggu permintaan Midtrans satu per satu.
+            await Task.WhenAll(payments.Select(
+                payment => SyncPaymentStatusAsync(payment)));
+
+            foreach (var payment in payments)
+            {
+                result[payment.IdPesanan] = payment.IdStatusPayment;
+            }
+
+            return result;
         }
 
         // =========================================================

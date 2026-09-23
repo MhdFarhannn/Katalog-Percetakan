@@ -6,10 +6,14 @@ namespace Katalog.Services
     public class PesananServices
     {
         private readonly Database db;
+        private readonly PaymentServices payment;
 
-        public PesananServices(Database _db)
+        public PesananServices(
+            Database _db,
+            PaymentServices _payment)
         {
             db = _db;
+            payment = _payment;
         }
 
         private const string SelectPesanan = @"
@@ -80,6 +84,8 @@ namespace Katalog.Services
 
             ApplyPaymentStatus(result);
 
+            await SyncPendingPaymentsAsync(result);
+
             return result;
         }
 
@@ -101,6 +107,8 @@ namespace Katalog.Services
             await AttachDetailsAsync(conn, result);
 
             ApplyPaymentStatus(result);
+
+            await SyncPendingPaymentsAsync(result);
 
             return result;
         }
@@ -140,6 +148,9 @@ namespace Katalog.Services
             }
 
             ApplyPaymentStatus(result);
+
+            await SyncPendingPaymentsAsync(
+                new List<PesananResponse> { result });
 
             result.Details = (await conn.QueryAsync<PesananDetailResponse>(
                 SelectDetail + " WHERE d.idPesanan = @Id;",
@@ -611,6 +622,50 @@ namespace Katalog.Services
             {
                 ApplyPaymentStatus(pesanan);
             }
+        }
+
+        // =========================================================
+        // SINKRONISASI STATUS PEMBAYARAN
+        //
+        // Frontend memantau status pembayaran lewat daftar / detail
+        // pesanan, jadi pesanan yang pembayarannya masih 'pending'
+        // ditarik status terakhirnya dari Midtrans. Pesanan dengan
+        // pembayaran final (paid / cancelled / expired / ...) tidak
+        // perlu disinkronkan lagi.
+        // =========================================================
+        private async Task SyncPendingPaymentsAsync(
+            List<PesananResponse> pesananList)
+        {
+            var ids = pesananList
+                .Where(p =>
+                    p.IdStatusPayment
+                        == PaymentStatusMap.MenungguPembayaran)
+                .Select(p => p.Id)
+                .ToList();
+
+            if (ids.Count == 0)
+            {
+                return;
+            }
+
+            var synced = await payment.SyncPendingPaymentsAsync(ids);
+
+            if (synced.Count == 0)
+            {
+                return;
+            }
+
+            foreach (var pesanan in pesananList)
+            {
+                if (synced.TryGetValue(
+                    pesanan.Id,
+                    out var idStatusPayment))
+                {
+                    pesanan.IdStatusPayment = idStatusPayment;
+                }
+            }
+
+            ApplyPaymentStatus(pesananList);
         }
 
         private static async Task AttachDetailsAsync(

@@ -5,8 +5,19 @@ mengonsumsi API Katalog Percetakan.
 
 ## Daftar Isi
 
+Baru mulai? Tentukan dulu frontend mana yang sedang dikerjakan:
+
+| Frontend | Panduan |
+|---|---|
+| **Admin & Petugas** | [admin.md](admin.md) |
+| **Pelanggan (pembeli)** | [pelanggan.md](pelanggan.md) |
+
+Dokumen teknis per fitur:
+
 | Dokumen | Isi |
 |---|---|
+| [admin.md](admin.md) | Panduan per role — endpoint untuk frontend Admin/Petugas |
+| [pelanggan.md](pelanggan.md) | Panduan per role — endpoint untuk frontend Pelanggan |
 | [authentication.md](authentication.md) | Login, register admin, login Google, profil |
 | [master-data.md](master-data.md) | Kategori, status product, status pengerjaan, product, layanan |
 | [alamat.md](alamat.md) | CRUD alamat pelanggan |
@@ -38,6 +49,27 @@ Authorization: Bearer <token>
 - Login juga mengembalikan `refreshToken`, namun **belum ada endpoint refresh**
   saat ini. Jika token kedaluwarsa, lakukan login ulang.
 - Role yang tersedia: `Admin`, `Petugas`, `Pelanggan`.
+
+### Ringkasan Akses per Role
+
+| Area | Pelanggan | Petugas | Admin |
+|---|---|---|---|
+| Katalog: `GET /api/v1/products`, `GET /api/v1/layanan` | ✔ | ✔ | ✔ |
+| `POST /api/v1/products` | ✖ | ✖ | ✔ |
+| Kelola katalog lain (layanan, kategori, status, `PUT`/`DELETE` product) | ⚠ * | ⚠ * | ✔ |
+| Alamat (`/api/v1/alamat`) | ✔ (miliknya) | ✔ (miliknya) | ✔ (miliknya) |
+| `GET /api/v1/pesanan/all` | ✖ (`403`) | ✔ | ✔ |
+| Buat / lihat pesanan sendiri | ✔ | ✔ | ✔ |
+| `PUT`/`DELETE /api/v1/pesanan/{id}` | hanya miliknya & belum ada pembayaran | ✖ (bukan pemilik) | ✖ (bukan pemilik) |
+| Pembayaran (`/api/v1/payment/...`) | miliknya | miliknya | miliknya |
+| Kelola petugas | — | — | ⚠ belum ada endpoint |
+
+> \* Beberapa endpoint tulis master data **belum dibatasi role** di server
+> (mis. `PUT`/`DELETE /api/v1/products` publik, `POST`/`PATCH`/`DELETE
+> /api/v1/layanan` bisa dipakai semua role yang login). Yang benar-benar
+> dibatasi `Admin` baru `POST /api/v1/products`. Detail: [admin.md](admin.md).
+>
+> Rincian per layar ada di [admin.md](admin.md) dan [pelanggan.md](pelanggan.md).
 
 ## Format Request
 
@@ -145,6 +177,9 @@ Nilai `paymentStatus` yang mungkin:
 > berdasarkan callback Snap. Status pembayaran yang sah hanya yang berasal dari
 > Midtrans, yaitu notifikasi/webhook ke backend atau hasil sinkronisasi yang
 > dilakukan backend saat `GET /api/v1/payment/pesanan/{idPesanan}` di-polling.
+> Sinkronisasi yang sama juga dijalankan saat daftar/detail pesanan dibaca
+> (`GET /api/v1/pesanan`, `GET /api/v1/pesanan/all`, `GET /api/v1/pesanan/{id}`),
+> sehingga status `paid` langsung terlihat pada halaman riwayat pesanan.
 
 ## CORS
 

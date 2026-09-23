@@ -70,7 +70,12 @@ builder.Services.AddScoped<LayananServices>();
 builder.Services.AddScoped<PesananServices>();
 
 //Midtrans & Payment Services
-builder.Services.AddHttpClient<MidtransService>();
+builder.Services.AddHttpClient<MidtransService>(client =>
+{
+    // Timeout dibatasi agar sinkronisasi status di daftar
+    // pesanan tidak menggantung ketika Midtrans tidak responsif.
+    client.Timeout = TimeSpan.FromSeconds(10);
+});
 builder.Services.AddScoped<PaymentServices>();
 
 
