@@ -542,38 +542,39 @@ namespace Katalog.Controller
             IWebHostEnvironment environment,
             List<PesananDetailRequest> items)
         {
+            Console.WriteLine($"[DEBUG] Total Items: {items.Count}");
+        
             foreach (var item in items)
             {
                 var desain = item.Desain;
-
+        
                 if (desain == null || desain.Length == 0)
                 {
+                    Console.WriteLine("[DEBUG] File Desain NULL atau Kosong!");
                     continue;
                 }
-
-                var folderPath = Path.Combine(
-                    environment.WebRootPath,
-                    "images",
-                    "desain");
-
+        
+                Console.WriteLine($"[DEBUG] File Diterima: {desain.FileName}, Size: {desain.Length} bytes");
+        
+                var rootPath = !string.IsNullOrEmpty(environment.WebRootPath)
+                    ? environment.WebRootPath
+                    : Path.Combine(environment.ContentRootPath, "wwwroot");
+        
+                var folderPath = Path.Combine(rootPath, "images", "desain");
+        
                 if (!Directory.Exists(folderPath))
                 {
                     Directory.CreateDirectory(folderPath);
                 }
-
-                var fileName =
-                    Guid.NewGuid().ToString()
-                    + Path.GetExtension(desain.FileName);
-
+        
+                var fileName = Guid.NewGuid().ToString() + Path.GetExtension(desain.FileName);
                 var filePath = Path.Combine(folderPath, fileName);
-
-                await using var stream =
-                    new FileStream(filePath, FileMode.Create);
-
+        
+                await using var stream = new FileStream(filePath, FileMode.Create);
                 await desain.CopyToAsync(stream);
-
-                item.DesainFilePath =
-                    "/images/desain/" + fileName;
+        
+                item.DesainFilePath = "/images/desain/" + fileName;
+                Console.WriteLine($"[DEBUG] File Berhasil Disimpan ke: {filePath}");
             }
         }
     }

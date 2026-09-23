@@ -59,7 +59,7 @@ namespace Katalog.Services
                 d.qty AS Qty,
                 d.harga_satuan AS HargaSatuan,
                 d.notes AS Notes,
-                d.desain_file_path AS DesainFilePath,
+                d.desain_file_path AS DesainFilePath, -- Dipetakan ke PesananDetailResponse.DesainFilePath
                 d.desain_text AS DesainText
             FROM Pesanan_Detail d
             INNER JOIN product pr
