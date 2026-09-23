@@ -55,6 +55,10 @@ Backend menerima webhook Midtrans
 Polling GET /api/v1/payment/pesanan/{id} → paymentStatus = "paid"
 ```
 
+Jika pelanggan tidak jadi membayar, panggil
+`POST /api/v1/payment/{idPesanan}/cancel` (lihat bagian
+[6. Batalkan Pembayaran](#6-batalkan-pembayaran-opsional)).
+
 ## 3. Contoh Lengkap (Vanilla JS)
 
 ```js
@@ -210,7 +214,35 @@ secara end-to-end:
 Tanpa tunnel, status tidak akan ter-update otomatis; gunakan simulasi notifikasi
 manual atau fitur **Resend notification** dari dashboard (tetap butuh URL publik).
 
-## 6. CORS
+## 6. Batalkan Pembayaran (Opsional)
+
+Panggil endpoint cancel bila pelanggan **tidak jadi checkout** (mis. menutup
+Snap tanpa membayar lalu membatalkan pesanan). Backend yang memanggil API
+Cancel Midtrans, jadi frontend tidak perlu tahu `order_id`.
+
+```js
+async function batalkanPembayaran(idPesanan) {
+  const res = await fetch(`${API}/api/v1/payment/${idPesanan}/cancel`, {
+    method: "POST",
+    headers: authHeaders(false),
+  });
+
+  const body = await res.json();
+
+  // 400: "Pembayaran sudah dibayar" / "Pembayaran tidak ditemukan"
+  if (!res.ok) throw new Error(body.message);
+
+  // body.paymentStatus === "cancelled"
+  tampilkanStatus("Pembayaran dibatalkan");
+  return body;
+}
+```
+
+Setelah dibatalkan, `POST /api/v1/payment/{idPesanan}` akan menolak dengan
+`400` `{ "message": "Pesanan sudah dibatalkan" }` — jadi jangan tampilkan lagi
+tombol bayar untuk pesanan tersebut.
+
+## 7. CORS
 
 Backend mengizinkan origin berikut (policy `AllowWebFrontend`):
 

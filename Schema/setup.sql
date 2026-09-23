@@ -64,6 +64,12 @@ CREATE TABLE IF NOT EXISTS status_pengerjaan (
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- status_payment
+CREATE TABLE status_payment (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    nama VARCHAR(100) NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- product
 CREATE TABLE IF NOT EXISTS product (
     id INT AUTO_INCREMENT,
@@ -191,13 +197,13 @@ CREATE TABLE IF NOT EXISTS Pesanan_Detail (
 CREATE TABLE IF NOT EXISTS payments (
     id INT AUTO_INCREMENT,
     idPesanan INT NOT NULL,
+    idStatusPayment INT NOT NULL,
     midtrans_order_id VARCHAR(100) NOT NULL,
     midtrans_transaction_id VARCHAR(100) NULL,
     snap_token VARCHAR(255) NULL,
     payment_type VARCHAR(50) NULL,
     gross_amount DECIMAL(15,2) NOT NULL,
     transaction_status VARCHAR(50) NULL,
-    payment_status VARCHAR(30) NOT NULL DEFAULT 'pending',
     transaction_time DATETIME NULL,
     settlement_time DATETIME NULL,
     expiry_time DATETIME NULL,
@@ -206,11 +212,17 @@ CREATE TABLE IF NOT EXISTS payments (
     PRIMARY KEY (id),
     UNIQUE KEY uq_payments_midtrans_order (midtrans_order_id),
     KEY fk_payments_pesanan (idPesanan),
+    KEY fk_payments_status (idStatusPayment),
     CONSTRAINT fk_payments_pesanan
         FOREIGN KEY (idPesanan)
         REFERENCES Pesanan(id)
         ON UPDATE CASCADE
-        ON DELETE CASCADE
+        ON DELETE CASCADE,
+    CONSTRAINT fk_payments_status
+        FOREIGN KEY (idStatusPayment)
+        REFERENCES status_payment(id)
+        ON UPDATE CASCADE
+        ON DELETE RESTRICT
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- =============================================================
@@ -227,9 +239,19 @@ INSERT IGNORE INTO status_product (id, nama) VALUES
     (3, 'Habis');
 
 INSERT IGNORE INTO status_pengerjaan (id, nama) VALUES
-    (1, 'Sedang Berlangsung');
+    (1, 'Sedang Berlangsung'),
+    (2, 'Dibatalkan');
 
 INSERT IGNORE INTO kategory_product (id, nama) VALUES
     (2, 'Percetakan'),
     (3, 'Packaging'),
     (4, 'Merchandise');
+
+INSERT INTO status_payment (id, nama) VALUES 
+    (1, "MENUNGGU PEMBAYARAN"),
+    (2, "DIBAYAR"),
+    (3, "DIBATALKAN"),
+    (4, "KEDALUWARSA"),
+    (5, "GAGAL"),
+    (6, "DIKEMBALIKAN");
+

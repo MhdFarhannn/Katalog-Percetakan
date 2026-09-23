@@ -20,6 +20,9 @@ namespace Katalog.Services
             logger = _logger;
         }
 
+        // Nama status_pengerjaan saat pembayaran dibatalkan
+        private const string PesananDibatalkan = "Dibatalkan";
+
         // =========================================================
         // CREATE PAYMENT (SNAP TOKEN)
         //
@@ -37,11 +40,14 @@ namespace Katalog.Services
                     ps.id AS Id,
                     ps.idUser AS IdUser,
                     ps.total_harga AS TotalHarga,
+                    sp.nama AS StatusPengerjaan,
                     u.Nama AS NamaUser,
                     u.Email AS Email
                 FROM Pesanan ps
                 INNER JOIN User u
                     ON u.Id = ps.idUser
+                INNER JOIN status_pengerjaan sp
+                    ON sp.id = ps.idStatusPengerjaan
                 WHERE
                     ps.id = @IdPesanan
                     AND ps.idUser = @IdUser
@@ -62,25 +68,35 @@ namespace Katalog.Services
                     "Pesanan tidak ditemukan");
             }
 
+            // Pesanan yang sudah dibatalkan tidak dapat dibayar
+            if (string.Equals(
+                pesanan.StatusPengerjaan,
+                PesananDibatalkan,
+                StringComparison.OrdinalIgnoreCase))
+            {
+                return PaymentResult.Fail(
+                    "Pesanan sudah dibatalkan");
+            }
+
             // Idempotent: kembalikan Snap token yang masih pending
             const string existingQuery = @"
                 SELECT
                     id AS Id,
                     idPesanan AS IdPesanan,
+                    idStatusPayment AS IdStatusPayment,
                     midtrans_order_id AS MidtransOrderId,
                     midtrans_transaction_id AS MidtransTransactionId,
                     snap_token AS SnapToken,
                     payment_type AS PaymentType,
                     gross_amount AS GrossAmount,
                     transaction_status AS TransactionStatus,
-                    payment_status AS PaymentStatus,
                     transaction_time AS TransactionTime,
                     settlement_time AS SettlementTime,
                     expiry_time AS ExpiryTime
                 FROM payments
                 WHERE
                     idPesanan = @IdPesanan
-                    AND payment_status = 'pending'
+                    AND idStatusPayment = @IdStatusPayment
                     AND snap_token IS NOT NULL
                 ORDER BY id DESC
                 LIMIT 1;";
@@ -88,27 +104,29 @@ namespace Katalog.Services
             var existing =
                 await conn.QueryFirstOrDefaultAsync<Payment>(
                     existingQuery,
-                    new { IdPesanan = idPesanan });
+                    new
+                    {
+                        IdPesanan = idPesanan,
+                        IdStatusPayment =
+                            PaymentStatusMap.MenungguPembayaran
+                    });
 
             if (existing != null)
             {
                 return PaymentResult.Ok(
-                    new PaymentResponse
-                    {
-                        IdPesanan = existing.IdPesanan,
-                        MidtransOrderId = existing.MidtransOrderId,
-                        GrossAmount = existing.GrossAmount,
-                        SnapToken = existing.SnapToken,
-                        PaymentStatus = existing.PaymentStatus
-                    },
+                    BuildPaymentResponse(existing),
                     "Pembayaran sudah dibuat");
             }
 
             var paidCount = await conn.ExecuteScalarAsync<int>(
                 @"SELECT COUNT(*) FROM payments
                   WHERE idPesanan = @IdPesanan
-                      AND payment_status = 'paid';",
-                new { IdPesanan = idPesanan });
+                      AND idStatusPayment = @IdStatusPayment;",
+                new
+                {
+                    IdPesanan = idPesanan,
+                    IdStatusPayment = PaymentStatusMap.Dibayar
+                });
 
             if (paidCount > 0)
             {
@@ -166,18 +184,18 @@ namespace Katalog.Services
                 INSERT INTO payments
                 (
                     idPesanan,
+                    idStatusPayment,
                     midtrans_order_id,
                     snap_token,
-                    gross_amount,
-                    payment_status
+                    gross_amount
                 )
                 VALUES
                 (
                     @IdPesanan,
+                    @IdStatusPayment,
                     @MidtransOrderId,
                     @SnapToken,
-                    @GrossAmount,
-                    'pending'
+                    @GrossAmount
                 );
 
                 SELECT LAST_INSERT_ID();";
@@ -187,6 +205,8 @@ namespace Katalog.Services
                 new
                 {
                     IdPesanan = pesanan.Id,
+                    IdStatusPayment =
+                        PaymentStatusMap.MenungguPembayaran,
                     MidtransOrderId = midtransOrderId,
                     SnapToken = snap.Token,
                     GrossAmount = pesanan.TotalHarga
@@ -203,7 +223,7 @@ namespace Katalog.Services
                 GrossAmount = pesanan.TotalHarga,
                 SnapToken = snap.Token,
                 RedirectUrl = snap.RedirectUrl,
-                PaymentStatus = "pending"
+                PaymentStatus = PaymentStatusMap.Pending
             });
         }
 
@@ -221,10 +241,10 @@ namespace Katalog.Services
             const string query = @"
                 SELECT
                     p.idPesanan AS IdPesanan,
+                    p.idStatusPayment AS IdStatusPayment,
                     p.midtrans_order_id AS MidtransOrderId,
                     p.gross_amount AS GrossAmount,
-                    p.snap_token AS SnapToken,
-                    p.payment_status AS PaymentStatus
+                    p.snap_token AS SnapToken
                 FROM payments p
                 INNER JOIN Pesanan ps
                     ON ps.id = p.idPesanan
@@ -234,13 +254,18 @@ namespace Katalog.Services
                 ORDER BY p.id DESC
                 LIMIT 1;";
 
-            return await conn.QueryFirstOrDefaultAsync<PaymentResponse>(
-                query,
-                new
-                {
-                    IdPesanan = idPesanan,
-                    IdUser = idUser
-                });
+            var payment =
+                await conn.QueryFirstOrDefaultAsync<Payment>(
+                    query,
+                    new
+                    {
+                        IdPesanan = idPesanan,
+                        IdUser = idUser
+                    });
+
+            return payment == null
+                ? null
+                : BuildPaymentResponse(payment);
         }
 
         // =========================================================
@@ -276,13 +301,13 @@ namespace Katalog.Services
                 SELECT
                     id AS Id,
                     idPesanan AS IdPesanan,
+                    idStatusPayment AS IdStatusPayment,
                     midtrans_order_id AS MidtransOrderId,
                     midtrans_transaction_id AS MidtransTransactionId,
                     snap_token AS SnapToken,
                     payment_type AS PaymentType,
                     gross_amount AS GrossAmount,
                     transaction_status AS TransactionStatus,
-                    payment_status AS PaymentStatus,
                     transaction_time AS TransactionTime,
                     settlement_time AS SettlementTime,
                     expiry_time AS ExpiryTime
@@ -323,10 +348,8 @@ namespace Katalog.Services
             }
 
             // 3. Idempotency: status sama tidak diproses ulang
-            if (string.Equals(
-                payment.PaymentStatus,
-                mappedStatus,
-                StringComparison.OrdinalIgnoreCase))
+            if (payment.IdStatusPayment
+                == PaymentStatusMap.ToId(mappedStatus))
             {
                 return NotificationResult.Ok(
                     "Notifikasi sudah diproses");
@@ -339,10 +362,10 @@ namespace Katalog.Services
             const string updatePayment = @"
                 UPDATE payments
                 SET
+                    idStatusPayment = @IdStatusPayment,
                     midtrans_transaction_id = @MidtransTransactionId,
                     payment_type = @PaymentType,
                     transaction_status = @TransactionStatus,
-                    payment_status = @PaymentStatus,
                     transaction_time = @TransactionTime,
                     settlement_time = @SettlementTime,
                     expiry_time = @ExpiryTime
@@ -353,12 +376,13 @@ namespace Katalog.Services
                 new
                 {
                     Id = payment.Id,
+                    IdStatusPayment =
+                        PaymentStatusMap.ToId(mappedStatus),
                     MidtransTransactionId =
                         notification.TransactionId,
                     PaymentType = notification.PaymentType,
                     TransactionStatus =
                         notification.TransactionStatus,
-                    PaymentStatus = mappedStatus,
                     TransactionTime =
                         notification.TransactionTime,
                     SettlementTime =
@@ -366,6 +390,16 @@ namespace Katalog.Services
                     ExpiryTime = notification.ExpiryTime
                 },
                 transaction);
+
+            // Transaksi yang batal / kedaluwarsa membuat
+            // pesanan ikut dibatalkan.
+            if (PaymentStatusMap.IsCancelled(mappedStatus))
+            {
+                await MarkPesananDibatalkanAsync(
+                    conn,
+                    transaction,
+                    payment.IdPesanan);
+            }
 
             transaction.Commit();
 
@@ -379,6 +413,155 @@ namespace Katalog.Services
         }
 
         // =========================================================
+        // CANCEL PAYMENT
+        //
+        // idUser didapat dari Bearer Token.
+        //
+        // Transaksi yang masih MENUNGGU PEMBAYARAN dibatalkan.
+        // Bila transaksi sudah terbuat di Midtrans, API Cancel
+        // Midtrans dipanggil lebih dulu, lalu idStatusPayment dan
+        // status Pesanan diperbarui mengikuti status akhirnya.
+        // =========================================================
+        public async Task<PaymentResult> CancelPaymentAsync(
+            int idPesanan,
+            int idUser)
+        {
+            using var conn = db.connect();
+
+            const string paymentQuery = @"
+                SELECT
+                    p.id AS Id,
+                    p.idPesanan AS IdPesanan,
+                    p.idStatusPayment AS IdStatusPayment,
+                    p.midtrans_order_id AS MidtransOrderId,
+                    p.snap_token AS SnapToken,
+                    p.gross_amount AS GrossAmount
+                FROM payments p
+                INNER JOIN Pesanan ps
+                    ON ps.id = p.idPesanan
+                WHERE
+                    p.idPesanan = @IdPesanan
+                    AND ps.idUser = @IdUser
+                ORDER BY p.id DESC
+                LIMIT 1;";
+
+            var payment =
+                await conn.QueryFirstOrDefaultAsync<Payment>(
+                    paymentQuery,
+                    new
+                    {
+                        IdPesanan = idPesanan,
+                        IdUser = idUser
+                    });
+
+            if (payment == null)
+            {
+                return PaymentResult.Fail(
+                    "Pembayaran tidak ditemukan");
+            }
+
+            // Pembayaran yang sudah lunas tidak dapat dibatalkan
+            if (payment.IdStatusPayment == PaymentStatusMap.Dibayar)
+            {
+                return PaymentResult.Fail(
+                    "Pembayaran sudah dibayar");
+            }
+
+            // Idempotent: pembayaran yang sudah dibatalkan
+            // tidak diproses ulang.
+            if (payment.IdStatusPayment == PaymentStatusMap.Dibatalkan)
+            {
+                return PaymentResult.Ok(
+                    BuildPaymentResponse(payment),
+                    "Pembayaran sudah dibatalkan");
+            }
+
+            string? transactionStatus = null;
+
+            // Transaksi Midtrans hanya bisa dibatalkan bila sudah
+            // terbuat di Midtrans (Snap token ada).
+            if (!string.IsNullOrWhiteSpace(payment.SnapToken))
+            {
+                var cancel =
+                    await midtrans.CancelTransactionAsync(
+                        payment.MidtransOrderId);
+
+                transactionStatus = cancel?.TransactionStatus;
+
+                // API Cancel tidak selalu mengembalikan
+                // transaction_status (mis. 412 karena transaksi
+                // sudah settlement). Ambil status terakhir dari
+                // Midtrans sebelum memutuskan.
+                if (string.IsNullOrWhiteSpace(transactionStatus))
+                {
+                    var status =
+                        await midtrans.GetTransactionStatusAsync(
+                            payment.MidtransOrderId);
+
+                    transactionStatus = status?.TransactionStatus;
+                }
+            }
+
+            // Transaksi yang belum terbuat di Midtrans langsung
+            // ditandai dibatalkan.
+            var mappedStatus =
+                string.IsNullOrWhiteSpace(transactionStatus)
+                    ? PaymentStatusMap.Cancelled
+                    : MapPaymentStatus(transactionStatus, null);
+
+            await conn.OpenAsync();
+            using var transaction = conn.BeginTransaction();
+
+            const string updatePayment = @"
+                UPDATE payments
+                SET
+                    idStatusPayment = @IdStatusPayment,
+                    transaction_status = @TransactionStatus
+                WHERE id = @Id;";
+
+            await conn.ExecuteAsync(
+                updatePayment,
+                new
+                {
+                    Id = payment.Id,
+                    IdStatusPayment =
+                        PaymentStatusMap.ToId(mappedStatus),
+                    TransactionStatus = transactionStatus
+                },
+                transaction);
+
+            // Transaksi yang batal / kedaluwarsa membuat
+            // pesanan ikut dibatalkan.
+            if (PaymentStatusMap.IsCancelled(mappedStatus))
+            {
+                await MarkPesananDibatalkanAsync(
+                    conn,
+                    transaction,
+                    payment.IdPesanan);
+            }
+
+            transaction.Commit();
+
+            logger.LogInformation(
+                "Pembayaran Pesanan {IdPesanan} diperbarui menjadi {Status}",
+                payment.IdPesanan,
+                mappedStatus);
+
+            // Midtrans menolak cancel karena transaksi sudah lunas
+            if (mappedStatus == PaymentStatusMap.Paid)
+            {
+                return PaymentResult.Fail(
+                    "Pembayaran sudah dibayar");
+            }
+
+            payment.IdStatusPayment = PaymentStatusMap.ToId(mappedStatus);
+
+            return PaymentResult.Ok(
+                BuildPaymentResponse(payment),
+                "Pembayaran berhasil dibatalkan");
+        }
+
+        // =========================================================
         // MAP MIDTRANS STATUS KE STATUS INTERNAL
         // =========================================================
         private static string MapPaymentStatus(
@@ -389,19 +572,72 @@ namespace Katalog.Services
             {
                 "capture" =>
                     fraudStatus == "challenge"
-                        ? "pending"
-                        : "paid",
-                "settlement" => "paid",
-                "pending" => "pending",
-                "deny" => "failed",
-                "cancel" => "cancelled",
-                "expire" => "expired",
-                "refund" => "refunded",
-                "partial_refund" => "refunded",
-                "chargeback" => "failed",
-                "partial_chargeback" => "failed",
-                _ => "pending"
+                        ? PaymentStatusMap.Pending
+                        : PaymentStatusMap.Paid,
+                "settlement" => PaymentStatusMap.Paid,
+                "pending" => PaymentStatusMap.Pending,
+                "deny" => PaymentStatusMap.Failed,
+                "cancel" => PaymentStatusMap.Cancelled,
+                "expire" => PaymentStatusMap.Expired,
+                "refund" => PaymentStatusMap.Refunded,
+                "partial_refund" => PaymentStatusMap.Refunded,
+                "chargeback" => PaymentStatusMap.Failed,
+                "partial_chargeback" => PaymentStatusMap.Failed,
+                _ => PaymentStatusMap.Pending
             };
+        }
+
+        // =========================================================
+        // RESPONSE PAYMENT DARI MODEL DATABASE
+        // =========================================================
+        private static PaymentResponse BuildPaymentResponse(
+            Payment payment)
+        {
+            return new PaymentResponse
+            {
+                IdPesanan = payment.IdPesanan,
+                MidtransOrderId = payment.MidtransOrderId,
+                GrossAmount = payment.GrossAmount,
+                SnapToken = payment.SnapToken,
+                PaymentStatus = PaymentStatusMap.ToCode(
+                    payment.IdStatusPayment)
+            };
+        }
+
+        // =========================================================
+        // TANDAI PESANAN SEBAGAI DIBATALKAN
+        //
+        // idStatusPengerjaan dicari lewat nama agar tidak
+        // bergantung pada id hasil seed.
+        // =========================================================
+        private static async Task MarkPesananDibatalkanAsync(
+            MySql.Data.MySqlClient.MySqlConnection conn,
+            MySql.Data.MySqlClient.MySqlTransaction transaction,
+            int idPesanan)
+        {
+            var idStatus = await conn.QueryFirstOrDefaultAsync<int?>(
+                @"SELECT id
+                  FROM status_pengerjaan
+                  WHERE nama = @Nama
+                  LIMIT 1;",
+                new { Nama = PesananDibatalkan },
+                transaction);
+
+            if (idStatus == null)
+            {
+                return;
+            }
+
+            await conn.ExecuteAsync(
+                @"UPDATE Pesanan
+                  SET idStatusPengerjaan = @IdStatusPengerjaan
+                  WHERE id = @IdPesanan;",
+                new
+                {
+                    IdPesanan = idPesanan,
+                    IdStatusPengerjaan = idStatus.Value
+                },
+                transaction);
         }
     }
 }

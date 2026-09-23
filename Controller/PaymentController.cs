@@ -116,6 +116,64 @@ namespace Katalog.Controller
             }).RequireAuthorization(Policies.AdminPetugasPelanggan);
 
             // =========================================================
+            // CANCEL PAYMENT
+            //
+            // POST /api/v1/payment/{idPesanan}/cancel
+            //
+            // Authorization: Bearer <token>
+            //
+            // Hanya pemilik pesanan. Transaksi Midtrans dibatalkan
+            // lebih dulu (bila sudah terbuat), lalu status pada
+            // payments dan Pesanan diperbarui.
+            // =========================================================
+
+            payment.MapPost("/{idPesanan}/cancel", async (
+                PaymentServices service,
+                int idPesanan,
+                HttpContext httpContext) =>
+            {
+                try
+                {
+                    var idUser = GetUserId(httpContext);
+
+                    if (idUser == null)
+                    {
+                        return Results.Unauthorized();
+                    }
+
+                    var result = await service.CancelPaymentAsync(
+                        idPesanan,
+                        idUser.Value);
+
+                    if (!result.Success)
+                    {
+                        return Results.BadRequest(new
+                        {
+                            message = result.Message
+                        });
+                    }
+
+                    return Results.Ok(result.Data);
+                }
+                catch (MidtransException e)
+                {
+                    return Results.Problem(
+                        title: "Midtrans Error",
+                        statusCode: 502,
+                        detail: e.Message
+                    );
+                }
+                catch (Exception e)
+                {
+                    return Results.Problem(
+                        title: "Internal Server Error",
+                        statusCode: 500,
+                        detail: e.Message
+                    );
+                }
+            }).RequireAuthorization(Policies.AdminPetugasPelanggan);
+
+            // =========================================================
             // MIDTRANS NOTIFICATION / WEBHOOK
             //
             // POST /api/v1/payment/midtrans/notification

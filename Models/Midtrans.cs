@@ -56,6 +56,28 @@ namespace Katalog.Models
         public string? RedirectUrl { get; set; }
     }
 
+    // Response POST /v2/{order_id}/cancel
+    //
+    // Pada status non-2xx (mis. transaksi sudah settlement),
+    // Midtrans hanya mengirim status_code & status_message.
+    public class MidtransCancelResponse
+    {
+        [JsonPropertyName("status_code")]
+        public string? StatusCode { get; set; }
+
+        [JsonPropertyName("status_message")]
+        public string? StatusMessage { get; set; }
+
+        [JsonPropertyName("transaction_id")]
+        public string? TransactionId { get; set; }
+
+        [JsonPropertyName("order_id")]
+        public string? OrderId { get; set; }
+
+        [JsonPropertyName("transaction_status")]
+        public string? TransactionStatus { get; set; }
+    }
+
     public class MidtransNotification
     {
         [JsonPropertyName("transaction_id")]

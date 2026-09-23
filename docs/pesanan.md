@@ -24,6 +24,10 @@ Base path: `/api/v1/pesanan` — semua endpoint **butuh Bearer token**.
 | PUT | `/api/v1/pesanan/{id}` | Pemilik, hanya bila **belum ada pembayaran** | `multipart/form-data` |
 | DELETE | `/api/v1/pesanan/{id}` | Pemilik, hanya bila **belum ada pembayaran** | — |
 
+> Pembayaran yang dibatalkan **tetap tercatat** di tabel `payments`, sehingga
+> pesanan yang sudah pernah dibuatkan pembayaran tidak bisa lagi diubah (`PUT`)
+> atau dihapus (`DELETE`).
+
 ## Model
 
 ### `PesananRequest`
@@ -127,7 +131,12 @@ Selamat Ulang Tahun
 ```
 
 `paymentStatus` bisa `unpaid` (belum ada pembayaran) atau salah satu status
-pembayaran (`pending`, `paid`, dst — lihat [README](README.md#status-pembayaran)).
+pembayaran (`pending`, `paid`, `cancelled`, `expired`, dst — lihat
+[README](README.md#status-pembayaran)).
+
+`statusPengerjaan` bernilai `Sedang Berlangsung`, atau `Dibatalkan` bila
+pembayaran pesanan dibatalkan oleh pelanggan atau kedaluwarsa (lihat
+[payment.md](payment.md#post-apiv1paymentidpesanancancel)).
 
 ---
 

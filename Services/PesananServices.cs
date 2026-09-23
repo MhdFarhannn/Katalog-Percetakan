@@ -24,7 +24,16 @@ namespace Katalog.Services
                 ps.total_harga AS TotalHarga,
                 COALESCE(
                     (
-                        SELECT p.payment_status
+                        -- idStatusPayment -> kode status (status_payment)
+                        SELECT
+                            CASE p.idStatusPayment
+                                WHEN 2 THEN 'paid'
+                                WHEN 3 THEN 'cancelled'
+                                WHEN 4 THEN 'expired'
+                                WHEN 5 THEN 'failed'
+                                WHEN 6 THEN 'refunded'
+                                ELSE 'pending'
+                            END
                         FROM payments p
                         WHERE p.idPesanan = ps.id
                         ORDER BY p.id DESC

@@ -135,6 +135,70 @@ namespace Katalog.Services
         }
 
         // =========================================================
+        // CANCEL TRANSACTION
+        //
+        // POST /v2/{order_id}/cancel
+        //
+        // Status non-2xx tetap dikembalikan apa adanya karena
+        // Midtrans mengirim status_message (mis. transaksi sudah
+        // settlement). null berarti body tidak bisa dibaca.
+        // =========================================================
+        public async Task<MidtransCancelResponse?> CancelTransactionAsync(
+            string orderId)
+        {
+            if (!IsConfigured)
+            {
+                throw new MidtransException(
+                    "Midtrans ServerKey belum dikonfigurasi.");
+            }
+
+            var url =
+                $"{ApiUrl}/{Uri.EscapeDataString(orderId)}/cancel";
+
+            using var httpRequest =
+                new HttpRequestMessage(HttpMethod.Post, url);
+
+            httpRequest.Headers.Authorization = BasicAuth();
+            httpRequest.Headers.Accept.Add(
+                new MediaTypeWithQualityHeaderValue("application/json"));
+
+            try
+            {
+                using var response = await _http.SendAsync(httpRequest);
+                var body = await response.Content.ReadAsStringAsync();
+
+                if (string.IsNullOrWhiteSpace(body))
+                {
+                    _logger.LogError(
+                        "Midtrans cancel gagal. Status: {Status}",
+                        (int)response.StatusCode);
+
+                    return null;
+                }
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    _logger.LogWarning(
+                        "Midtrans cancel order {OrderId} status {Status}.",
+                        orderId,
+                        (int)response.StatusCode);
+                }
+
+                return JsonSerializer.Deserialize<MidtransCancelResponse>(
+                    body);
+            }
+            catch (TaskCanceledException)
+            {
+                throw new MidtransException("Midtrans timeout.");
+            }
+            catch (HttpRequestException)
+            {
+                throw new MidtransException(
+                    "Tidak dapat terhubung ke Midtrans.");
+            }
+        }
+
+        // =========================================================
         // QUERY TRANSACTION STATUS
         // =========================================================
         public async Task<MidtransNotification?> GetTransactionStatusAsync(

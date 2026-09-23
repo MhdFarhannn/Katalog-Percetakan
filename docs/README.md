@@ -11,7 +11,7 @@ mengonsumsi API Katalog Percetakan.
 | [master-data.md](master-data.md) | Kategori, status product, status pengerjaan, product, layanan |
 | [alamat.md](alamat.md) | CRUD alamat pelanggan |
 | [pesanan.md](pesanan.md) | CRUD pesanan (order) + detail item |
-| [payment.md](payment.md) | Pembuatan pembayaran Midtrans Snap & status |
+| [payment.md](payment.md) | Pembuatan, pembatalan, dan status pembayaran Midtrans Snap |
 | [frontend-snap.md](frontend-snap.md) | Integrasi Midtrans Snap di frontend |
 
 ## Base URL
@@ -132,6 +132,14 @@ Nilai `paymentStatus` yang mungkin:
 | `expired` | Kedaluwarsa |
 | `cancelled` | Dibatalkan |
 | `refunded` | Dikembalikan |
+
+> Status di atas disimpan pada tabel `payments` sebagai `idStatusPayment`, yaitu
+> foreign key ke tabel master `status_payment`. API tetap mengembalikan kode
+> (`pending`, `paid`, ...) — rincian kolom dan pemetaannya ada di
+> [payment.md](payment.md#struktur-tabel-payments).
+>
+> Pembatalan pembayaran oleh pelanggan memakai
+> `POST /api/v1/payment/{idPesanan}/cancel`.
 
 > **Penting:** frontend **tidak boleh** menandai pesanan sebagai `paid`
 > berdasarkan callback Snap. Status pembayaran yang sah hanya yang berasal dari
