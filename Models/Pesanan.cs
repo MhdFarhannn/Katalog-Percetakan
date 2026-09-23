@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Katalog.Models
 {
     public class Pesanan
@@ -62,7 +64,13 @@ namespace Katalog.Models
 
         public decimal TotalHarga { get; set; }
 
-        public string PaymentStatus { get; set; } = "unpaid";
+        public string PaymentStatus { get; set; } = PaymentStatusMap.Unpaid;
+
+        // idStatusPayment pembayaran terakhir (JOIN status_payment).
+        // Tidak dikirim ke API, hanya dipakai untuk memetakan
+        // PaymentStatus (kode) di PesananServices.
+        [JsonIgnore]
+        public int? IdStatusPayment { get; set; }
 
         public DateTime? CreatedAt { get; set; }
 

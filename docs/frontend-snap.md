@@ -9,7 +9,7 @@ pembayaran Midtrans **Sandbox**.
   boleh ada di backend (`appsettings.json`).
 - Yang dipakai frontend hanya **Client Key** (Sandbox).
 - **JANGAN** menandai pesanan `paid` hanya karena callback `onSuccess`.
-  Status resmi ditentukan oleh webhook Midtrans ke backend. Lakukan polling.
+  Status resmi ditentukan oleh Midtrans (webhook + sinkronisasi saat polling).
 
 ## 1. Tambahkan Snap Script
 
@@ -211,8 +211,11 @@ secara end-to-end:
    ```
 4. `paymentStatus` akan berubah menjadi `paid` dan polling frontend berhenti.
 
-Tanpa tunnel, status tidak akan ter-update otomatis; gunakan simulasi notifikasi
-manual atau fitur **Resend notification** dari dashboard (tetap butuh URL publik).
+Tanpa tunnel, `paymentStatus` tetap ter-update saat frontend polling, karena
+backend menarik status terakhir dari Midtrans di endpoint
+`GET /api/v1/payment/pesanan/{idPesanan}`. Webhook tetap disarankan agar status
+berubah tanpa menunggu polling (atau gunakan **Resend notification** dari
+dashboard Midtrans).
 
 ## 6. Batalkan Pembayaran (Opsional)
 

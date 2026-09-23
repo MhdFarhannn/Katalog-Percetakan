@@ -143,7 +143,8 @@ Nilai `paymentStatus` yang mungkin:
 
 > **Penting:** frontend **tidak boleh** menandai pesanan sebagai `paid`
 > berdasarkan callback Snap. Status pembayaran yang sah hanya yang berasal dari
-> notifikasi/webhook Midtrans ke backend.
+> Midtrans, yaitu notifikasi/webhook ke backend atau hasil sinkronisasi yang
+> dilakukan backend saat `GET /api/v1/payment/pesanan/{idPesanan}` di-polling.
 
 ## CORS
 

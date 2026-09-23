@@ -74,7 +74,9 @@ Master status (`status_payment`) dan kode yang dikembalikan API:
 >
 > Pemetaan kode → `idStatusPayment` ada di `PaymentStatusMap`
 > (`Models/Payment.cs`), sedangkan `PesananResponse.paymentStatus` diturunkan
-> dari pembayaran terakhir pesanan tersebut.
+> dari pembayaran terakhir pesanan tersebut, yaitu `payments.idStatusPayment`
+> (di-JOIN ke `status_payment`) yang kodenya dipetakan di `PesananServices`.
+> Pesanan yang belum punya baris di `payments` bernilai `unpaid`.
 
 ---
 
@@ -128,6 +130,13 @@ window.snap.pay(payment.snapToken, {
 ## GET /api/v1/payment/pesanan/{idPesanan}
 
 Mengembalikan pembayaran terbaru untuk pesanan milik user.
+
+- Bila pembayaran masih **`pending`** (`idStatusPayment = 1`), backend mengambil
+  status terakhir langsung dari Midtrans (`GET /v2/{order_id}/status`) dan
+  menyimpannya lebih dulu. Status `paid` / `cancelled` / `expired` / `failed`
+  jadi tetap ter-update walau notifikasi webhook belum atau tidak sampai.
+- Bila Midtrans tidak dapat dihubungi, response tetap `200` dengan status yang
+  tersimpan di database (polling tidak ikut gagal).
 
 **Response 200** — `PaymentResponse` (tanpa `redirectUrl`).
 
@@ -220,3 +229,8 @@ Webhook dari server Midtrans. **Jangan dipanggil dari frontend.**
 Backend yang mengubah status pembayaran berdasarkan notifikasi ini. Karena itu,
 frontend harus melakukan **polling** ke endpoint status sampai `paymentStatus`
 menjadi `paid` (lihat [frontend-snap.md](frontend-snap.md)).
+
+> Webhook adalah jalur utama, tetapi bukan satu-satunya: setiap polling ke
+> `GET /api/v1/payment/pesanan/{idPesanan}` juga menyinkronkan status terakhir
+> dari Midtrans untuk pembayaran yang masih `pending`. Jadi status tetap berubah
+> bila URL notifikasi belum dikonfigurasi (mis. server lokal tanpa tunnel).

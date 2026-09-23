@@ -240,6 +240,7 @@ namespace Katalog.Services
 
             const string query = @"
                 SELECT
+                    p.id AS Id,
                     p.idPesanan AS IdPesanan,
                     p.idStatusPayment AS IdStatusPayment,
                     p.midtrans_order_id AS MidtransOrderId,
@@ -263,9 +264,92 @@ namespace Katalog.Services
                         IdUser = idUser
                     });
 
-            return payment == null
-                ? null
-                : BuildPaymentResponse(payment);
+            if (payment == null)
+            {
+                return null;
+            }
+
+            // Endpoint ini di-polling frontend sampai pembayaran lunas,
+            // jadi status terakhir ikut disinkronkan dari Midtrans.
+            // Dengan begitu status tetap berubah walau notifikasi
+            // webhook belum / tidak sampai ke server.
+            await SyncPaymentStatusAsync(conn, payment);
+
+            return BuildPaymentResponse(payment);
+        }
+
+        // =========================================================
+        // SINKRONISASI STATUS PEMBAYARAN DARI MIDTRANS
+        //
+        // Hanya diproses untuk pembayaran yang belum final (masih
+        // MENUNGGU PEMBAYARAN). Status terakhir diambil lewat
+        // GET /v2/{order_id}/status lalu disimpan dengan alur yang
+        // sama seperti notifikasi webhook.
+        // =========================================================
+        private async Task SyncPaymentStatusAsync(
+            MySql.Data.MySqlClient.MySqlConnection conn,
+            Payment payment)
+        {
+            if (payment.IdStatusPayment
+                    != PaymentStatusMap.MenungguPembayaran
+                || string.IsNullOrWhiteSpace(payment.MidtransOrderId))
+            {
+                return;
+            }
+
+            MidtransNotification? status;
+
+            try
+            {
+                status = await midtrans.GetTransactionStatusAsync(
+                    payment.MidtransOrderId);
+            }
+            catch (MidtransException e)
+            {
+                // Midtrans tidak dapat dihubungi: polling tetap
+                // mengembalikan status yang tersimpan di database.
+                logger.LogWarning(
+                    "Sinkronisasi status order {OrderId} gagal: {Message}",
+                    payment.MidtransOrderId,
+                    e.Message);
+
+                return;
+            }
+
+            if (status == null
+                || string.IsNullOrWhiteSpace(status.TransactionStatus))
+            {
+                return;
+            }
+
+            var mappedStatus = MapPaymentStatus(
+                status.TransactionStatus,
+                status.FraudStatus);
+
+            if (payment.IdStatusPayment
+                == PaymentStatusMap.ToId(mappedStatus))
+            {
+                return;
+            }
+
+            await conn.OpenAsync();
+            using var transaction = conn.BeginTransaction();
+
+            await ApplyPaymentStatusAsync(
+                conn,
+                transaction,
+                payment,
+                mappedStatus,
+                status);
+
+            transaction.Commit();
+
+            payment.IdStatusPayment = PaymentStatusMap.ToId(mappedStatus);
+
+            logger.LogInformation(
+                "Status Pesanan {IdPesanan} disinkronkan dari Midtrans menjadi {Status}",
+                payment.IdPesanan,
+                mappedStatus);
         }
 
         // =========================================================
@@ -359,47 +443,12 @@ namespace Katalog.Services
             await conn.OpenAsync();
             using var transaction = conn.BeginTransaction();
 
-            const string updatePayment = @"
-                UPDATE payments
-                SET
-                    idStatusPayment = @IdStatusPayment,
-                    midtrans_transaction_id = @MidtransTransactionId,
-                    payment_type = @PaymentType,
-                    transaction_status = @TransactionStatus,
-                    transaction_time = @TransactionTime,
-                    settlement_time = @SettlementTime,
-                    expiry_time = @ExpiryTime
-                WHERE id = @Id;";
-
-            await conn.ExecuteAsync(
-                updatePayment,
-                new
-                {
-                    Id = payment.Id,
-                    IdStatusPayment =
-                        PaymentStatusMap.ToId(mappedStatus),
-                    MidtransTransactionId =
-                        notification.TransactionId,
-                    PaymentType = notification.PaymentType,
-                    TransactionStatus =
-                        notification.TransactionStatus,
-                    TransactionTime =
-                        notification.TransactionTime,
-                    SettlementTime =
-                        notification.SettlementTime,
-                    ExpiryTime = notification.ExpiryTime
-                },
-                transaction);
-
-            // Transaksi yang batal / kedaluwarsa membuat
-            // pesanan ikut dibatalkan.
-            if (PaymentStatusMap.IsCancelled(mappedStatus))
-            {
-                await MarkPesananDibatalkanAsync(
-                    conn,
-                    transaction,
-                    payment.IdPesanan);
-            }
+            await ApplyPaymentStatusAsync(
+                conn,
+                transaction,
+                payment,
+                mappedStatus,
+                notification);
 
             transaction.Commit();
 
@@ -585,6 +634,57 @@ namespace Katalog.Services
                 "partial_chargeback" => PaymentStatusMap.Failed,
                 _ => PaymentStatusMap.Pending
             };
+        }
+
+        // =========================================================
+        // SIMPAN STATUS PEMBAYARAN
+        //
+        // Dipakai notifikasi webhook & sinkronisasi status.
+        // Status batal / kedaluwarsa sekaligus menandai Pesanan
+        // sebagai dibatalkan dalam transaksi yang sama.
+        // =========================================================
+        private static async Task ApplyPaymentStatusAsync(
+            MySql.Data.MySqlClient.MySqlConnection conn,
+            MySql.Data.MySqlClient.MySqlTransaction transaction,
+            Payment payment,
+            string mappedStatus,
+            MidtransNotification source)
+        {
+            const string updatePayment = @"
+                UPDATE payments
+                SET
+                    idStatusPayment = @IdStatusPayment,
+                    midtrans_transaction_id = @MidtransTransactionId,
+                    payment_type = @PaymentType,
+                    transaction_status = @TransactionStatus,
+                    transaction_time = @TransactionTime,
+                    settlement_time = @SettlementTime,
+                    expiry_time = @ExpiryTime
+                WHERE id = @Id;";
+
+            await conn.ExecuteAsync(
+                updatePayment,
+                new
+                {
+                    Id = payment.Id,
+                    IdStatusPayment =
+                        PaymentStatusMap.ToId(mappedStatus),
+                    MidtransTransactionId = source.TransactionId,
+                    PaymentType = source.PaymentType,
+                    TransactionStatus = source.TransactionStatus,
+                    TransactionTime = source.TransactionTime,
+                    SettlementTime = source.SettlementTime,
+                    ExpiryTime = source.ExpiryTime
+                },
+                transaction);
+
+            if (PaymentStatusMap.IsCancelled(mappedStatus))
+            {
+                await MarkPesananDibatalkanAsync(
+                    conn,
+                    transaction,
+                    payment.IdPesanan);
+            }
         }
 
         // =========================================================

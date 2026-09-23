@@ -91,6 +91,9 @@ namespace Katalog.Models
 
         public const string Refunded = "refunded";
 
+        // Dipakai pesanan yang belum punya baris di payments
+        public const string Unpaid = "unpaid";
+
         public static string ToCode(int idStatusPayment)
         {
             return idStatusPayment switch

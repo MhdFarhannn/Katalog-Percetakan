@@ -22,25 +22,17 @@ namespace Katalog.Services
                 ps.idStatusPengerjaan AS IdStatusPengerjaan,
                 sp.nama AS StatusPengerjaan,
                 ps.total_harga AS TotalHarga,
-                COALESCE(
-                    (
-                        -- idStatusPayment -> kode status (status_payment)
-                        SELECT
-                            CASE p.idStatusPayment
-                                WHEN 2 THEN 'paid'
-                                WHEN 3 THEN 'cancelled'
-                                WHEN 4 THEN 'expired'
-                                WHEN 5 THEN 'failed'
-                                WHEN 6 THEN 'refunded'
-                                ELSE 'pending'
-                            END
-                        FROM payments p
-                        WHERE p.idPesanan = ps.id
-                        ORDER BY p.id DESC
-                        LIMIT 1
-                    ),
-                    'unpaid'
-                ) AS PaymentStatus,
+                (
+                    -- idStatusPayment pembayaran terakhir pada payments
+                    -- (JOIN status_payment), kode status dipetakan di C#
+                    SELECT p.idStatusPayment
+                    FROM payments p
+                    INNER JOIN status_payment spm
+                        ON spm.id = p.idStatusPayment
+                    WHERE p.idPesanan = ps.id
+                    ORDER BY p.id DESC
+                    LIMIT 1
+                ) AS IdStatusPayment,
                 ps.Created_At AS CreatedAt
             FROM Pesanan ps
             INNER JOIN User u
@@ -86,6 +78,8 @@ namespace Katalog.Services
 
             await AttachDetailsAsync(conn, result);
 
+            ApplyPaymentStatus(result);
+
             return result;
         }
 
@@ -105,6 +99,8 @@ namespace Katalog.Services
                 .ToList();
 
             await AttachDetailsAsync(conn, result);
+
+            ApplyPaymentStatus(result);
 
             return result;
         }
@@ -142,6 +138,8 @@ namespace Katalog.Services
             {
                 return null;
             }
+
+            ApplyPaymentStatus(result);
 
             result.Details = (await conn.QueryAsync<PesananDetailResponse>(
                 SelectDetail + " WHERE d.idPesanan = @Id;",
@@ -586,6 +584,32 @@ namespace Katalog.Services
                         DesainText = item.DesainText
                     },
                     transaction);
+            }
+        }
+
+        // =========================================================
+        // PEMETAAN STATUS PEMBAYARAN
+        //
+        // idStatusPayment didapat dari payments (JOIN status_payment).
+        // Kode status ('pending', 'paid', ...) dipetakan di C# lewat
+        // PaymentStatusMap. Pesanan yang belum punya baris di payments
+        // tetap bernilai 'unpaid' (default PesananResponse).
+        // =========================================================
+        private static void ApplyPaymentStatus(PesananResponse pesanan)
+        {
+            if (pesanan.IdStatusPayment.HasValue)
+            {
+                pesanan.PaymentStatus = PaymentStatusMap.ToCode(
+                    pesanan.IdStatusPayment.Value);
+            }
+        }
+
+        private static void ApplyPaymentStatus(
+            List<PesananResponse> pesananList)
+        {
+            foreach (var pesanan in pesananList)
+            {
+                ApplyPaymentStatus(pesanan);
             }
         }
 

@@ -134,6 +134,11 @@ Selamat Ulang Tahun
 pembayaran (`pending`, `paid`, `cancelled`, `expired`, dst — lihat
 [README](README.md#status-pembayaran)).
 
+Nilai tersebut diambil dari `payments.idStatusPayment` pembayaran terakhir
+pesanan (JOIN ke tabel master `status_payment`), lalu kodenya dipetakan di
+C# lewat `PaymentStatusMap`. Pesanan yang belum punya baris di `payments`
+tetap `unpaid`.
+
 `statusPengerjaan` bernilai `Sedang Berlangsung`, atau `Dibatalkan` bila
 pembayaran pesanan dibatalkan oleh pelanggan atau kedaluwarsa (lihat
 [payment.md](payment.md#post-apiv1paymentidpesanancancel)).
