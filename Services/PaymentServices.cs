@@ -51,6 +51,7 @@ namespace Katalog.Services
                 WHERE
                     ps.id = @IdPesanan
                     AND ps.idUser = @IdUser
+                    AND ps.Deleted_At IS NULL
                 LIMIT 1;";
 
             var pesanan =
@@ -142,7 +143,8 @@ namespace Katalog.Services
                   FROM Pesanan_Detail d
                   INNER JOIN product pr
                       ON pr.id = d.idProduct
-                  WHERE d.idPesanan = @IdPesanan;",
+                  WHERE d.idPesanan = @IdPesanan
+                      AND d.deleted_at IS NULL;",
                 new { IdPesanan = idPesanan }))
                 .ToList();
 
@@ -252,6 +254,7 @@ namespace Katalog.Services
                 WHERE
                     p.idPesanan = @IdPesanan
                     AND ps.idUser = @IdUser
+                    AND ps.Deleted_At IS NULL
                 ORDER BY p.id DESC
                 LIMIT 1;";
 
@@ -582,6 +585,7 @@ namespace Katalog.Services
                 WHERE
                     p.idPesanan = @IdPesanan
                     AND ps.idUser = @IdUser
+                    AND ps.Deleted_At IS NULL
                 ORDER BY p.id DESC
                 LIMIT 1;";
 
@@ -822,7 +826,8 @@ namespace Katalog.Services
             await conn.ExecuteAsync(
                 @"UPDATE Pesanan
                   SET idStatusPengerjaan = @IdStatusPengerjaan
-                  WHERE id = @IdPesanan;",
+                  WHERE id = @IdPesanan
+                      AND Deleted_At IS NULL;",
                 new
                 {
                     IdPesanan = idPesanan,

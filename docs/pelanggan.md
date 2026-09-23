@@ -38,6 +38,7 @@ Authorization: Bearer <token>
 | Ubah / hapus alamat | `PATCH` / `DELETE` `/api/v1/alamat/{id}` | Bearer |
 | Buat pesanan | `POST /api/v1/pesanan` | Bearer (`multipart/form-data`) |
 | Riwayat / daftar pesanan saya | `GET /api/v1/pesanan` | Bearer |
+| Riwayat pesanan (filter tanggal/status, paginasi) | `GET /api/v1/pesanan/history` | Bearer |
 | Detail pesanan | `GET /api/v1/pesanan/{id}` | Bearer |
 | Ubah / hapus pesanan (sebelum bayar) | `PUT` / `DELETE` `/api/v1/pesanan/{id}` | Bearer |
 | Bayar (ambil Snap token) | `POST /api/v1/payment/{idPesanan}` | Bearer |
@@ -135,6 +136,8 @@ Aturan untuk frontend:
 | Endpoint | Kenapa |
 |---|---|
 | `GET /api/v1/pesanan/all` | Khusus `Admin`/`Petugas` → `403` untuk pelanggan |
+| `PUT /api/v1/pesanan/{id}/status` | Ubah status pengerjaan — khusus `Admin` → `403` |
+| `GET /api/v1/reports/sales` | Laporan penjualan — `Admin`/`Petugas` → `403` |
 | `GET /api/v1/alamat/all`, `GET /api/v1/alamat/user/{idUser}` | Dipakai layar admin |
 | `POST /api/v1/products`, `POST`/`PATCH`/`DELETE /api/v1/layanan` | Aksi katalog, bukan aksi pelanggan |
 | `POST /api/v1/payment/midtrans/notification` | Dipanggil server Midtrans, **jangan** dari frontend |

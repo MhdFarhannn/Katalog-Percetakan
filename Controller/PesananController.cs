@@ -127,6 +127,84 @@ namespace Katalog.Controller
             });
 
             // =========================================================
+            // ORDER HISTORY
+            //
+            // GET /api/v1/pesanan/history
+            //
+            // Query parameter:
+            //   startDate        yyyy-MM-dd (inclusive, opsional)
+            //   endDate          yyyy-MM-dd (inclusive, opsional)
+            //   idStatusPengerjaan  filter status pengerjaan (opsional)
+            //   idUser           khusus Admin/Petugas (opsional)
+            //   page             default 1
+            //   pageSize         default 10, maksimal 100
+            //
+            // Pelanggan SELALU memakai idUser miliknya sendiri
+            // (dari JWT) — parameter idUser diabaikan untuk role ini.
+            // =========================================================
+
+            pesanan.MapGet("/history", async (
+                PesananServices service,
+                [AsParameters] PesananHistoryQuery query,
+                HttpContext httpContext) =>
+            {
+                try
+                {
+                    var idUser = GetUserId(httpContext);
+
+                    if (idUser == null)
+                    {
+                        return Results.Unauthorized();
+                    }
+
+                    if (!TryParseDate(
+                            query.StartDate,
+                            out _))
+                    {
+                        return Results.BadRequest(new
+                        {
+                            message = "Format startDate harus yyyy-MM-dd"
+                        });
+                    }
+
+                    if (!TryParseDate(
+                            query.EndDate,
+                            out _))
+                    {
+                        return Results.BadRequest(new
+                        {
+                            message = "Format endDate harus yyyy-MM-dd"
+                        });
+                    }
+
+                    var isStaff =
+                        httpContext.User.IsInRole("Admin")
+                        || httpContext.User.IsInRole("Petugas");
+
+                    // Pelanggan: terkunci ke idUser sendiri.
+                    // Admin/Petugas: bisa memakai filter idUser opsional.
+                    int? idUserFilter = isStaff
+                        ? query.IdUser
+                        : idUser.Value;
+
+                    var result =
+                        await service.GetPesananHistoryAsync(
+                            query,
+                            idUserFilter);
+
+                    return Results.Ok(result);
+                }
+                catch (Exception e)
+                {
+                    return Results.Problem(
+                        title: "Internal Server Error",
+                        statusCode: 500,
+                        detail: e.Message
+                    );
+                }
+            });
+
+            // =========================================================
             // CREATE PESANAN
             //
             // POST /api/v1/pesanan
@@ -290,6 +368,90 @@ namespace Katalog.Controller
             }).DisableAntiforgery();
 
             // =========================================================
+            // UPDATE STATUS PENGERJAAN (ADMIN)
+            //
+            // PUT /api/v1/pesanan/{id}/status
+            //
+            // Content-Type: application/json (JSON, bukan multipart).
+            //
+            // Validasi:
+            //   - body wajib punya idStatusPengerjaan ATAU
+            //     statusPengerjaan (minimal salah satu)
+            //   - status harus ada di tabel status_pengerjaan
+            //   - pesanan harus ada dan belum di-soft delete
+            //
+            // Akses: hanya role Admin (403 untuk role lain).
+            // =========================================================
+
+            pesanan.MapPut("/{id}/status", async (
+                PesananServices service,
+                int id,
+                PesananStatusRequest? request) =>
+            {
+                try
+                {
+                    if (request == null
+                        || (request.IdStatusPengerjaan == null
+                            && string.IsNullOrWhiteSpace(
+                                request.StatusPengerjaan)))
+                    {
+                        return Results.BadRequest(new
+                        {
+                            message = "IdStatusPengerjaan atau StatusPengerjaan wajib diisi"
+                        });
+                    }
+
+                    var statusId =
+                        await service.ResolveStatusPengerjaanIdAsync(
+                            request.IdStatusPengerjaan,
+                            request.StatusPengerjaan);
+
+                    if (statusId == null)
+                    {
+                        if (request.IdStatusPengerjaan.HasValue)
+                        {
+                            return Results.BadRequest(new
+                            {
+                                message = $"Status pengerjaan {request.IdStatusPengerjaan} tidak ditemukan"
+                            });
+                        }
+
+                        return Results.BadRequest(new
+                        {
+                            message = $"Status pengerjaan '{request.StatusPengerjaan}' tidak ditemukan"
+                        });
+                    }
+
+                    var updated =
+                        await service.UpdateStatusPengerjaanAsync(
+                            id,
+                            statusId.Value);
+
+                    if (!updated)
+                    {
+                        return Results.NotFound(new
+                        {
+                            message = "Pesanan tidak ditemukan"
+                        });
+                    }
+
+                    var result = await service.GetPesananByIdAsync(
+                        id,
+                        null);
+
+                    return Results.Ok(result);
+                }
+                catch (Exception e)
+                {
+                    return Results.Problem(
+                        title: "Internal Server Error",
+                        statusCode: 500,
+                        detail: e.Message
+                    );
+                }
+            }).RequireAuthorization(Policies.Admin);
+
+            // =========================================================
             // DELETE PESANAN
             //
             // DELETE /api/v1/pesanan/{id}
@@ -448,6 +610,29 @@ namespace Katalog.Controller
             }
 
             return idUser;
+        }
+
+        // =========================================================
+        // VALIDASI FORMAT TANGGAL (yyyy-MM-dd)
+        // =========================================================
+        private static bool TryParseDate(
+            string? value,
+            out DateTime result)
+        {
+            result = default;
+
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                // Null / kosong = filter tidak dipakai (valid).
+                return true;
+            }
+
+            return DateTime.TryParseExact(
+                value,
+                "yyyy-MM-dd",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None,
+                out result);
         }
 
         // =========================================================

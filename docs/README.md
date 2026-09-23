@@ -21,9 +21,11 @@ Dokumen teknis per fitur:
 | [authentication.md](authentication.md) | Login, register admin, login Google, profil |
 | [master-data.md](master-data.md) | Kategori, status product, status pengerjaan, product, layanan |
 | [alamat.md](alamat.md) | CRUD alamat pelanggan |
-| [pesanan.md](pesanan.md) | CRUD pesanan (order) + detail item |
+| [pesanan.md](pesanan.md) | CRUD pesanan (order) + detail item + ubah status (Admin) |
+| [laporan.md](laporan.md) | Order history (filter/paginasi) & sales report (agregasi penjualan) |
 | [payment.md](payment.md) | Pembuatan, pembatalan, dan status pembayaran Midtrans Snap |
 | [frontend-snap.md](frontend-snap.md) | Integrasi Midtrans Snap di frontend |
+| [schema.md](schema.md) | Skema database, kolom audit & soft delete |
 
 ## Base URL
 
@@ -59,8 +61,11 @@ Authorization: Bearer <token>
 | Kelola katalog lain (layanan, kategori, status, `PUT`/`DELETE` product) | ⚠ * | ⚠ * | ✔ |
 | Alamat (`/api/v1/alamat`) | ✔ (miliknya) | ✔ (miliknya) | ✔ (miliknya) |
 | `GET /api/v1/pesanan/all` | ✖ (`403`) | ✔ | ✔ |
+| `GET /api/v1/pesanan/history` | miliknya | semua pesanan | semua pesanan |
 | Buat / lihat pesanan sendiri | ✔ | ✔ | ✔ |
 | `PUT`/`DELETE /api/v1/pesanan/{id}` | hanya miliknya & belum ada pembayaran | ✖ (bukan pemilik) | ✖ (bukan pemilik) |
+| `PUT /api/v1/pesanan/{id}/status` (ubah status pengerjaan) | ✖ | ✖ | ✔ |
+| `GET /api/v1/reports/sales` (laporan penjualan) | ✖ | ✔ | ✔ |
 | Pembayaran (`/api/v1/payment/...`) | miliknya | miliknya | miliknya |
 | Kelola petugas | — | — | ⚠ belum ada endpoint |
 

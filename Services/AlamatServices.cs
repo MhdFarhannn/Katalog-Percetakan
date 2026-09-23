@@ -30,6 +30,7 @@ namespace Katalog.Services
                 FROM Alamat a
                 INNER JOIN User u
                     ON u.Id = a.idUser
+                WHERE a.deleted_at IS NULL
                 ORDER BY a.id DESC;
             ";
 
@@ -60,6 +61,7 @@ namespace Katalog.Services
                 INNER JOIN User u
                     ON u.Id = a.idUser
                 WHERE a.idUser = @IdUser
+                    AND a.deleted_at IS NULL
                 ORDER BY a.id DESC;
             ";
 
@@ -99,6 +101,7 @@ namespace Katalog.Services
                 WHERE
                     a.id = @Id
                     AND a.idUser = @IdUser
+                    AND a.deleted_at IS NULL
                 LIMIT 1;
             ";
 
@@ -147,7 +150,8 @@ namespace Katalog.Services
                 FROM Alamat a
                 INNER JOIN User u
                     ON u.Id = a.idUser
-                WHERE a.id = LAST_INSERT_ID();
+                WHERE a.id = LAST_INSERT_ID()
+                    AND a.deleted_at IS NULL;
             ";
 
             return await conn.QueryFirstOrDefaultAsync<AlamatResponse>(
@@ -183,7 +187,8 @@ namespace Katalog.Services
                     no_telepon = @NoTelepon
                 WHERE
                     id = @Id
-                    AND idUser = @IdUser;
+                    AND idUser = @IdUser
+                    AND deleted_at IS NULL;
             ";
 
             var result = await conn.ExecuteAsync(
@@ -201,12 +206,14 @@ namespace Katalog.Services
         }
 
         // =========================================================
-        // DELETE ALAMAT
+        // DELETE ALAMAT (SOFT DELETE)
         // PELANGGAN
         //
         // idUser didapat dari Bearer Token
         //
-        // User hanya bisa menghapus alamat miliknya sendiri
+        // User hanya bisa menghapus alamat miliknya sendiri.
+        // Baris tidak dihapus permanen agar FK di Pesanan
+        // tetap valid; deleted_at diisi sebagai penanda hapus.
         // =========================================================
         public async Task<bool> DeleteAlamatAsync(
             int id,
@@ -215,10 +222,12 @@ namespace Katalog.Services
             using var conn = db.connect();
 
             const string query = @"
-                DELETE FROM Alamat
+                UPDATE Alamat
+                SET deleted_at = NOW()
                 WHERE
                     id = @Id
-                    AND idUser = @IdUser;
+                    AND idUser = @IdUser
+                    AND deleted_at IS NULL;
             ";
 
             var result = await conn.ExecuteAsync(

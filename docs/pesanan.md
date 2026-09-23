@@ -22,14 +22,21 @@ Base path: `/api/v1/pesanan` — semua endpoint **butuh Bearer token**.
 |---|---|---|---|
 | POST | `/api/v1/pesanan` | Pelanggan (pemilik) | `multipart/form-data` |
 | GET | `/api/v1/pesanan` | Pesanan milik sendiri | — |
+| GET | `/api/v1/pesanan/history` | Semua role — filter tanggal/status/paginasi (lihat [laporan.md](laporan.md)) | — |
 | GET | `/api/v1/pesanan/all` | `Admin` / `Petugas` | — |
 | GET | `/api/v1/pesanan/{id}` | Pemilik, atau `Admin`/`Petugas` | — |
 | PUT | `/api/v1/pesanan/{id}` | Pemilik, hanya bila **belum ada pembayaran** | `multipart/form-data` |
+| PUT | `/api/v1/pesanan/{id}/status` | `Admin` (ubah status pengerjaan) | `application/json` |
 | DELETE | `/api/v1/pesanan/{id}` | Pemilik, hanya bila **belum ada pembayaran** | — |
 
 > Pembayaran yang dibatalkan **tetap tercatat** di tabel `payments`, sehingga
 > pesanan yang sudah pernah dibuatkan pembayaran tidak bisa lagi diubah (`PUT`)
 > atau dihapus (`DELETE`).
+>
+> `DELETE /api/v1/pesanan/{id}` adalah **soft delete**: baris `Pesanan` dan
+> `Pesanan_Detail` tidak dihapus permanen, hanya diisi `Deleted_At` /
+> `deleted_at`. Setelah di-soft delete, pesanan tidak muncul lagi di endpoint
+> GET mana pun dan `GET /api/v1/pesanan/{id}` mengembalikan `404`.
 
 ## Model
 
@@ -114,6 +121,7 @@ Selamat Ulang Tahun
   "totalHarga": 100000.00,
   "paymentStatus": "unpaid",
   "createdAt": "2026-09-17T08:18:46+07:00",
+  "updatedAt": "2026-09-17T08:18:46+07:00",
   "details": [
     {
       "id": 6,
@@ -218,6 +226,40 @@ const pesanan = await res.json(); // pesanan.id dipakai untuk pembayaran
 **Response 200** — seluruh pesanan (Admin/Petugas).
 **Error `403`** — Pelanggan.
 
+## GET /api/v1/pesanan/history (Order History)
+
+Ringkasan parameter, contoh request/response, dan error ada di
+[laporan.md](laporan.md#order-history). Endpoint ini mengembalikan pesanan
+**aktif** (`Deleted_At IS NULL`) milik user login (pelanggan) atau seluruh
+pesanan (Admin/Petugas, bisa difilter `idUser`), dengan filter:
+
+| Query parameter | Tipe | Wajib | Keterangan |
+|---|---|---|---|
+| `startDate` | string `yyyy-MM-dd` | Tidak | Rentang awal (inclusive) |
+| `endDate` | string `yyyy-MM-dd` | Tidak | Rentang akhir (inclusive) |
+| `idStatusPengerjaan` | int | Tidak | Filter status pengerjaan |
+| `idUser` | int | Tidak | Khusus `Admin`/`Petugas`; diabaikan untuk pelanggan |
+| `page` | int | Tidak | Default `1` |
+| `pageSize` | int | Tidak | Default `10`, maksimal `100` |
+
+**Response 200**
+
+```json
+{
+  "items": [ { "...": "PesananResponse[]" } ],
+  "total": 57,
+  "page": 1,
+  "pageSize": 10
+}
+```
+
+**Error `400`**
+
+```json
+{ "message": "Format startDate harus yyyy-MM-dd" }
+{ "message": "Format endDate harus yyyy-MM-dd" }
+```
+
 ## GET /api/v1/pesanan/{id}
 
 **Response 200** — `PesananResponse` (termasuk `details`).
@@ -226,7 +268,8 @@ const pesanan = await res.json(); // pesanan.id dipakai untuk pembayaran
 ## PUT /api/v1/pesanan/{id}
 
 Field form **sama seperti POST** (multipart/form-data, bukan JSON).
-Mengganti seluruh `items` (detail lama dihapus).
+Mengganti seluruh `items` (detail lama di-soft delete, lalu detail baru
+di-insert sebagai baris aktif).
 
 **Response 200** — `PesananResponse` terbaru.
 
@@ -235,6 +278,54 @@ Mengganti seluruh `items` (detail lama dihapus).
 ```json
 { "message": "Pesanan tidak ditemukan atau sudah memiliki pembayaran" }
 ```
+
+## PUT /api/v1/pesanan/{id}/status
+
+**Akses: hanya `Admin`** (`403` untuk `Petugas`/`Pelanggan`).
+**Content-Type: `application/json`** — bukan multipart.
+
+Ubah `idStatusPengerjaan` sebuah pesanan. Detail lengkap (request, response,
+error) ada di [laporan.md](laporan.md#put-apiv1pesananidstatus-admin).
+
+**Request**
+
+```http
+PUT /api/v1/pesanan/12/status HTTP/1.1
+Authorization: Bearer <token-admin>
+Content-Type: application/json
+
+{ "statusPengerjaan": "Selesai" }
+```
+
+atau pakai id:
+
+```json
+{ "idStatusPengerjaan": 3 }
+```
+
+Minimal salah satu field wajib diisi, dan status harus ada di tabel
+`status_pengerjaan`.
+
+**Response 200** — `PesananResponse` terbaru (termasuk `updatedAt`).
+
+**Error**
+
+```json
+// 400 - body kosong / kedua field kosong
+{ "message": "IdStatusPengerjaan atau StatusPengerjaan wajib diisi" }
+
+// 400 - status tidak ada di master
+{ "message": "Status pengerjaan 99 tidak ditemukan" }
+{ "message": "Status pengerjaan 'Nganggur' tidak ditemukan" }
+
+// 404 - pesanan tidak ada / sudah di-soft delete
+{ "message": "Pesanan tidak ditemukan" }
+
+// 403 - bukan role Admin
+```
+
+Status yang tersedia: `GET /api/v1/status-pengerjaan`
+(seed: `1 Sedang Berlangsung`, `2 Dibatalkan`, `3 Selesai`).
 
 ## DELETE /api/v1/pesanan/{id}
 
@@ -245,6 +336,11 @@ Mengganti seluruh `items` (detail lama dihapus).
 ```
 
 **Error `400`** — `{ "message": "Pesanan tidak ditemukan atau sudah memiliki pembayaran" }`.
+
+> DELETE di sini adalah **soft delete**: `Pesanan.Deleted_At` dan
+> `Pesanan_Detail.deleted_at` diisi waktu hapus; baris tetap ada di database
+> agar histori & laporan tetap konsisten (lihat
+> [schema.md](schema.md#4-soft-delete)).
 
 > Setelah pesanan dibuat, lanjutkan ke [payment.md](payment.md) untuk
 > membuat transaksi Midtrans.

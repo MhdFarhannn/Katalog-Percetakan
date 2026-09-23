@@ -69,6 +69,9 @@ builder.Services.AddScoped<LayananServices>();
 //Pesanan Services
 builder.Services.AddScoped<PesananServices>();
 
+//Report Services (sales report)
+builder.Services.AddScoped<ReportServices>();
+
 //Midtrans & Payment Services
 builder.Services.AddHttpClient<MidtransService>(client =>
 {
@@ -184,6 +187,7 @@ app.MapAlamat();
 app.MapLayanan();
 app.MapPesanan();
 app.MapPayment();
+app.MapReport();
 
 
 app.Run();

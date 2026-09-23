@@ -75,6 +75,8 @@ namespace Katalog.Services
         
                 LEFT JOIN status_product sp
                     ON p.idStatusProduct = sp.id
+
+                WHERE p.deleted_at IS NULL
             ";
         
             var result = await conn.QueryAsync<
@@ -140,7 +142,8 @@ namespace Katalog.Services
                     imagePath = @ImagePath,
                     harga = @Harga,
                     background_color = @BackgroundColor
-                WHERE id = @Id";
+                WHERE id = @Id
+                    AND deleted_at IS NULL";
 
             var result = await conn.ExecuteAsync(query, new
             {
@@ -157,14 +160,18 @@ namespace Katalog.Services
             return result > 0;
         }
 
-        // DELETE PRODUCT
+        // DELETE PRODUCT (SOFT DELETE)
+        // Baris tidak dihapus permanen; kolom deleted_at diisi
+        // agar histori pesanan (FK RESTRICT) tetap valid.
         public async Task<bool> DeleteProductAsync(int id)
         {
             using var conn = db.connect();
 
             const string query = @"
-                DELETE FROM product
-                WHERE id = @Id";
+                UPDATE product
+                SET deleted_at = NOW()
+                WHERE id = @Id
+                    AND deleted_at IS NULL";
 
             var result = await conn.ExecuteAsync(
                 query,

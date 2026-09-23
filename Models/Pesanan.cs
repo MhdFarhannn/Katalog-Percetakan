@@ -15,6 +15,10 @@ namespace Katalog.Models
         public decimal TotalHarga { get; set; }
 
         public DateTime? CreatedAt { get; set; }
+
+        public DateTime? UpdatedAt { get; set; }
+
+        public DateTime? DeletedAt { get; set; }
     }
 
     public class PesananRequest
@@ -22,6 +26,53 @@ namespace Katalog.Models
         public int IdAlamat { get; set; }
 
         public List<PesananDetailRequest> Items { get; set; } = new();
+    }
+
+    // =========================================================
+    // PUT /api/v1/pesanan/{id}/status (Admin)
+    //
+    // Status boleh dikirim sebagai id (IdStatusPengerjaan)
+    // ATAU nama (StatusPengerjaan). Minimal salah satu terisi.
+    // =========================================================
+    public class PesananStatusRequest
+    {
+        public int? IdStatusPengerjaan { get; set; }
+
+        public string? StatusPengerjaan { get; set; }
+    }
+
+    // =========================================================
+    // GET /api/v1/pesanan/history (Order History)
+    //
+    // Parameter diikat dari query string. Tanggal memakai
+    // format yyyy-MM-dd. Page / PageSize di-clamp di service.
+    // =========================================================
+    public class PesananHistoryQuery
+    {
+        public string? StartDate { get; set; }
+
+        public string? EndDate { get; set; }
+
+        public int? IdStatusPengerjaan { get; set; }
+
+        // Hanya dipakai Admin/Petugas; Pelanggan selalu
+        // memakai idUser miliknya sendiri (dari JWT).
+        public int? IdUser { get; set; }
+
+        public int Page { get; set; } = 1;
+
+        public int PageSize { get; set; } = 10;
+    }
+
+    public class PesananHistoryResponse
+    {
+        public List<PesananResponse> Items { get; set; } = new();
+
+        public int Total { get; set; }
+
+        public int Page { get; set; }
+
+        public int PageSize { get; set; }
     }
 
     public class PesananDetailRequest
@@ -73,6 +124,8 @@ namespace Katalog.Models
         public int? IdStatusPayment { get; set; }
 
         public DateTime? CreatedAt { get; set; }
+
+        public DateTime? UpdatedAt { get; set; }
 
         public List<PesananDetailResponse> Details { get; set; } = new();
     }

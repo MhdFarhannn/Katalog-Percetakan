@@ -4,8 +4,17 @@
 -- Engine  : InnoDB
 -- Charset : utf8mb4 / utf8mb4_unicode_ci
 --
+-- Audit & Soft Delete:
+--   created_at / Created_At  : waktu baris dibuat
+--   updated_at / Updated_At  : waktu baris terakhir diubah (otomatis)
+--   deleted_at / Deleted_At  : waktu soft delete; NULL = baris aktif
+-- Soft delete DIAPLIKASIKAN pada tabel: product, Alamat,
+-- Pesanan, Pesanan_Detail. Tabel lain hanya punya kolom audit.
+--
 -- Urutan pembuatan tabel mengikuti dependency foreign key.
 -- Jalankan dari atas ke bawah.
+-- Untuk database yang sudah berjalan, pakai
+-- Schema/migration_soft_delete_audit.sql (idempotent).
 -- =============================================================
 
 -- =============================================================
@@ -16,6 +25,8 @@
 CREATE TABLE IF NOT EXISTS Roles (
     Id INT NOT NULL AUTO_INCREMENT,
     Nama VARCHAR(255) NOT NULL,
+    created_at TIMESTAMP NULL DEFAULT current_timestamp(),
+    updated_at TIMESTAMP NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
     PRIMARY KEY (Id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -47,6 +58,8 @@ CREATE TABLE IF NOT EXISTS User (
 CREATE TABLE IF NOT EXISTS kategory_product (
     id INT AUTO_INCREMENT,
     nama VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP NULL DEFAULT current_timestamp(),
+    updated_at TIMESTAMP NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -54,6 +67,8 @@ CREATE TABLE IF NOT EXISTS kategory_product (
 CREATE TABLE IF NOT EXISTS status_product (
     id INT AUTO_INCREMENT,
     nama VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP NULL DEFAULT current_timestamp(),
+    updated_at TIMESTAMP NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -61,14 +76,18 @@ CREATE TABLE IF NOT EXISTS status_product (
 CREATE TABLE IF NOT EXISTS status_pengerjaan (
     id INT AUTO_INCREMENT,
     nama VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP NULL DEFAULT current_timestamp(),
+    updated_at TIMESTAMP NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- status_payment
-CREATE TABLE status_payment (
+CREATE TABLE IF NOT EXISTS status_payment (
     id INT AUTO_INCREMENT PRIMARY KEY,
-    nama VARCHAR(100) NOT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    nama VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP NULL DEFAULT current_timestamp(),
+    updated_at TIMESTAMP NULL DEFAULT current_timestamp() ON UPDATE current_timestamp()
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- product
 CREATE TABLE IF NOT EXISTS product (
@@ -81,9 +100,13 @@ CREATE TABLE IF NOT EXISTS product (
     harga DECIMAL(15,2) NOT NULL,
     background_color VARCHAR(25) NULL,
     diskon DECIMAL(15,2) NULL,
+    created_at TIMESTAMP NULL DEFAULT current_timestamp(),
+    updated_at TIMESTAMP NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
     PRIMARY KEY (id),
     KEY fk_product_kategory (idKategoriProduct),
     KEY fk_status_product (idStatusProduct),
+    KEY idx_product_deleted (deleted_at),
     CONSTRAINT fk_product_kategory
         FOREIGN KEY (idKategoriProduct)
         REFERENCES kategory_product(id)
@@ -100,6 +123,8 @@ CREATE TABLE IF NOT EXISTS Ukuran_Produk (
     idProduct INT NOT NULL,
     nama VARCHAR(50) NOT NULL,
     harga_tambahan DECIMAL(15,2) DEFAULT 0.00,
+    created_at TIMESTAMP NULL DEFAULT current_timestamp(),
+    updated_at TIMESTAMP NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
     PRIMARY KEY (id),
     KEY fk_ukuran_product (idProduct),
     CONSTRAINT fk_ukuran_product
@@ -117,8 +142,12 @@ CREATE TABLE IF NOT EXISTS Alamat (
     idUser INT NOT NULL,
     content TEXT NOT NULL,
     no_telepon VARCHAR(20) NULL,
+    created_at TIMESTAMP NULL DEFAULT current_timestamp(),
+    updated_at TIMESTAMP NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
     PRIMARY KEY (id),
     KEY fk_alamat_user (idUser),
+    KEY idx_alamat_aktif (idUser, deleted_at),
     CONSTRAINT fk_alamat_user
         FOREIGN KEY (idUser)
         REFERENCES User(Id)
@@ -132,6 +161,8 @@ CREATE TABLE IF NOT EXISTS Layanan (
     deskripsi TEXT NULL,
     imagePath VARCHAR(255) NULL,
     background_color VARCHAR(25) NULL,
+    created_at TIMESTAMP NULL DEFAULT current_timestamp(),
+    updated_at TIMESTAMP NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
     PRIMARY KEY (id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
@@ -147,10 +178,15 @@ CREATE TABLE IF NOT EXISTS Pesanan (
     idStatusPengerjaan INT NOT NULL,
     total_harga DECIMAL(15,2) NOT NULL,
     Created_At TIMESTAMP NULL DEFAULT current_timestamp(),
+    Updated_At TIMESTAMP NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+    Deleted_At TIMESTAMP NULL DEFAULT NULL,
     PRIMARY KEY (id),
     KEY fk_pesanan_user (idUser),
     KEY fk_pesanan_alamat (idAlamat),
     KEY fk_pesanan_status (idStatusPengerjaan),
+    KEY idx_pesanan_aktif (idUser, Deleted_At),
+    KEY idx_pesanan_status (idStatusPengerjaan, Deleted_At),
+    KEY idx_pesanan_tanggal (Created_At, Deleted_At),
     CONSTRAINT fk_pesanan_user
         FOREIGN KEY (idUser)
         REFERENCES User(Id),
@@ -174,10 +210,14 @@ CREATE TABLE IF NOT EXISTS Pesanan_Detail (
     notes TEXT NULL,
     desain_file_path VARCHAR(255) NULL,
     desain_text TEXT NULL,
+    created_at TIMESTAMP NULL DEFAULT current_timestamp(),
+    updated_at TIMESTAMP NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
+    deleted_at TIMESTAMP NULL DEFAULT NULL,
     PRIMARY KEY (id),
     KEY fk_detail_pesanan (idPesanan),
     KEY fk_detail_product (idProduct),
     KEY fk_detail_ukuran (idUkuranProduk),
+    KEY idx_detail_aktif (idPesanan, deleted_at),
     CONSTRAINT fk_detail_pesanan
         FOREIGN KEY (idPesanan)
         REFERENCES Pesanan(id),
@@ -193,7 +233,7 @@ CREATE TABLE IF NOT EXISTS Pesanan_Detail (
 -- Payment (Midtrans)
 -- =============================================================
 
--- payments
+-- payments (bukti transaksi: tanpa soft delete)
 CREATE TABLE IF NOT EXISTS payments (
     id INT AUTO_INCREMENT,
     idPesanan INT NOT NULL,
@@ -213,6 +253,7 @@ CREATE TABLE IF NOT EXISTS payments (
     UNIQUE KEY uq_payments_midtrans_order (midtrans_order_id),
     KEY fk_payments_pesanan (idPesanan),
     KEY fk_payments_status (idStatusPayment),
+    KEY idx_payments_status (idPesanan, idStatusPayment),
     CONSTRAINT fk_payments_pesanan
         FOREIGN KEY (idPesanan)
         REFERENCES Pesanan(id)
@@ -240,18 +281,18 @@ INSERT IGNORE INTO status_product (id, nama) VALUES
 
 INSERT IGNORE INTO status_pengerjaan (id, nama) VALUES
     (1, 'Sedang Berlangsung'),
-    (2, 'Dibatalkan');
+    (2, 'Dibatalkan'),
+    (3, 'Selesai');
 
 INSERT IGNORE INTO kategory_product (id, nama) VALUES
     (2, 'Percetakan'),
     (3, 'Packaging'),
     (4, 'Merchandise');
 
-INSERT INTO status_payment (id, nama) VALUES 
-    (1, "MENUNGGU PEMBAYARAN"),
-    (2, "DIBAYAR"),
-    (3, "DIBATALKAN"),
-    (4, "KEDALUWARSA"),
-    (5, "GAGAL"),
-    (6, "DIKEMBALIKAN");
-
+INSERT IGNORE INTO status_payment (id, nama) VALUES
+    (1, 'MENUNGGU PEMBAYARAN'),
+    (2, 'DIBAYAR'),
+    (3, 'DIBATALKAN'),
+    (4, 'KEDALUWARSA'),
+    (5, 'GAGAL'),
+    (6, 'DIKEMBALIKAN');

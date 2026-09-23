@@ -37,7 +37,8 @@ namespace Katalog.Services
                     ORDER BY p.id DESC
                     LIMIT 1
                 ) AS IdStatusPayment,
-                ps.Created_At AS CreatedAt
+                ps.Created_At AS CreatedAt,
+                ps.Updated_At AS UpdatedAt
             FROM Pesanan ps
             INNER JOIN User u
                 ON u.Id = ps.idUser
@@ -45,6 +46,7 @@ namespace Katalog.Services
                 ON a.id = ps.idAlamat
             INNER JOIN status_pengerjaan sp
                 ON sp.id = ps.idStatusPengerjaan
+            WHERE ps.Deleted_At IS NULL
         ";
 
         private const string SelectDetail = @"
@@ -66,6 +68,7 @@ namespace Katalog.Services
                 ON pr.id = d.idProduct
             LEFT JOIN Ukuran_Produk up
                 ON up.id = d.idUkuranProduk
+            WHERE d.deleted_at IS NULL
         ";
 
         // =========================================================
@@ -100,7 +103,7 @@ namespace Katalog.Services
 
             var result = (await conn.QueryAsync<PesananResponse>(
                 SelectPesanan
-                    + " WHERE ps.idUser = @IdUser ORDER BY ps.id DESC;",
+                    + " AND ps.idUser = @IdUser ORDER BY ps.id DESC;",
                 new { IdUser = idUser }))
                 .ToList();
 
@@ -124,7 +127,7 @@ namespace Katalog.Services
         {
             using var conn = db.connect();
 
-            var query = SelectPesanan + " WHERE ps.id = @Id";
+            var query = SelectPesanan + " AND ps.id = @Id";
 
             if (idUser.HasValue)
             {
@@ -153,11 +156,187 @@ namespace Katalog.Services
                 new List<PesananResponse> { result });
 
             result.Details = (await conn.QueryAsync<PesananDetailResponse>(
-                SelectDetail + " WHERE d.idPesanan = @Id;",
+                SelectDetail + " AND d.idPesanan = @Id;",
                 new { Id = id }))
                 .ToList();
 
             return result;
+        }
+
+        // =========================================================
+        // ORDER HISTORY
+        //
+        // GET /api/v1/pesanan/history
+        //
+        // Mengambil daftar pesanan berdasarkan parameter:
+        // rentang tanggal (Created_At), idStatusPengerjaan,
+        // idUser (opsional, Admin/Petugas), dan paginasi.
+        // idUserFilter di-pass dari controller: Pelanggan selalu
+        // terkunci ke idUser miliknya sendiri.
+        //
+        // Hanya pesanan aktif (Deleted_At IS NULL) yang masuk.
+        // =========================================================
+        public async Task<PesananHistoryResponse> GetPesananHistoryAsync(
+            PesananHistoryQuery query,
+            int? idUserFilter)
+        {
+            using var conn = db.connect();
+
+            var page = query.Page < 1 ? 1 : query.Page;
+            var pageSize = query.PageSize < 1
+                ? 10
+                : Math.Min(query.PageSize, 100);
+
+            var filters = new List<string>();
+            var param = new DynamicParameters();
+
+            if (idUserFilter.HasValue)
+            {
+                filters.Add("AND ps.idUser = @IdUser");
+                param.Add("IdUser", idUserFilter.Value);
+            }
+
+            if (query.IdStatusPengerjaan.HasValue)
+            {
+                filters.Add("AND ps.idStatusPengerjaan = @IdStatusPengerjaan");
+                param.Add("IdStatusPengerjaan", query.IdStatusPengerjaan.Value);
+            }
+
+            // startDate / endDate (yyyy-MM-dd, inclusive keduanya).
+            // endDate diperluas +1 hari agar transaksi sepanjang
+            // hari terakhir ikut terhitung (filter < endExclusive).
+            DateTime? startAt = null;
+            DateTime? endAtExclusive = null;
+
+            if (DateTime.TryParse(
+                    query.StartDate,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None,
+                    out var parsedStart))
+            {
+                startAt = parsedStart.Date;
+            }
+
+            if (DateTime.TryParse(
+                    query.EndDate,
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None,
+                    out var parsedEnd))
+            {
+                endAtExclusive = parsedEnd.Date.AddDays(1);
+            }
+
+            if (startAt.HasValue)
+            {
+                filters.Add("AND ps.Created_At >= @StartAt");
+                param.Add("StartAt", startAt.Value);
+            }
+
+            if (endAtExclusive.HasValue)
+            {
+                filters.Add("AND ps.Created_At < @EndAt");
+                param.Add("EndAt", endAtExclusive.Value);
+            }
+
+            var filterSql = filters.Count > 0
+                ? " " + string.Join(" ", filters)
+                : string.Empty;
+
+            var total = await conn.ExecuteScalarAsync<int>(
+                @"SELECT COUNT(*)
+                  FROM Pesanan ps
+                  WHERE ps.Deleted_At IS NULL" + filterSql + ";",
+                param);
+
+            // LIMIT/OFFSET diinterpolasi sebagai int yang sudah
+            // di-clamp di atas — aman dari injection.
+            var offset = (page - 1) * pageSize;
+
+            var items = (await conn.QueryAsync<PesananResponse>(
+                SelectPesanan
+                    + filterSql
+                    + $" ORDER BY ps.id DESC LIMIT {pageSize} OFFSET {offset};",
+                param))
+                .ToList();
+
+            await AttachDetailsAsync(conn, items);
+
+            ApplyPaymentStatus(items);
+
+            await SyncPendingPaymentsAsync(items);
+
+            return new PesananHistoryResponse
+            {
+                Items = items,
+                Total = total,
+                Page = page,
+                PageSize = pageSize
+            };
+        }
+
+        // =========================================================
+        // RESOLVE STATUS PENGERJAAN
+        //
+        // Menerima id ATAU nama status, mengembalikan id valid
+        // dari tabel status_pengerjaan. Null bila tidak ditemukan
+        // atau keduanya kosong.
+        // =========================================================
+        public async Task<int?> ResolveStatusPengerjaanIdAsync(
+            int? idStatusPengerjaan,
+            string? statusPengerjaan)
+        {
+            using var conn = db.connect();
+
+            if (idStatusPengerjaan.HasValue)
+            {
+                return await conn.QueryFirstOrDefaultAsync<int?>(
+                    @"SELECT id
+                      FROM status_pengerjaan
+                      WHERE id = @Id
+                      LIMIT 1;",
+                    new { Id = idStatusPengerjaan.Value });
+            }
+
+            if (!string.IsNullOrWhiteSpace(statusPengerjaan))
+            {
+                return await conn.QueryFirstOrDefaultAsync<int?>(
+                    @"SELECT id
+                      FROM status_pengerjaan
+                      WHERE nama = @Nama
+                      LIMIT 1;",
+                    new { Nama = statusPengerjaan.Trim() });
+            }
+
+            return null;
+        }
+
+        // =========================================================
+        // UPDATE STATUS PENGERJAAN (ADMIN)
+        //
+        // PUT /api/v1/pesanan/{id}/status
+        //
+        // Hanya menulis idStatusPengerjaan pada pesanan aktif
+        // (Deleted_At IS NULL). Updated_At ikut ter-update
+        // otomatis lewat ON UPDATE current_timestamp().
+        // =========================================================
+        public async Task<bool> UpdateStatusPengerjaanAsync(
+            int id,
+            int idStatusPengerjaan)
+        {
+            using var conn = db.connect();
+
+            var result = await conn.ExecuteAsync(
+                @"UPDATE Pesanan
+                  SET idStatusPengerjaan = @IdStatusPengerjaan
+                  WHERE id = @Id
+                      AND Deleted_At IS NULL;",
+                new
+                {
+                    Id = id,
+                    IdStatusPengerjaan = idStatusPengerjaan
+                });
+
+            return result > 0;
         }
 
         // =========================================================
@@ -172,7 +351,9 @@ namespace Katalog.Services
             const string query = @"
                 SELECT COUNT(*)
                 FROM Alamat
-                WHERE id = @IdAlamat AND idUser = @IdUser;";
+                WHERE id = @IdAlamat
+                    AND idUser = @IdUser
+                    AND deleted_at IS NULL;";
 
             var count = await conn.ExecuteScalarAsync<int>(
                 query,
@@ -192,7 +373,8 @@ namespace Katalog.Services
             const string query = @"
                 SELECT COUNT(*)
                 FROM product
-                WHERE id = @IdProduct;";
+                WHERE id = @IdProduct
+                    AND deleted_at IS NULL;";
 
             var count = await conn.ExecuteScalarAsync<int>(
                 query,
@@ -356,7 +538,9 @@ namespace Katalog.Services
             const string ownerQuery = @"
                 SELECT id
                 FROM Pesanan
-                WHERE id = @Id AND idUser = @IdUser
+                WHERE id = @Id
+                    AND idUser = @IdUser
+                    AND Deleted_At IS NULL
                 LIMIT 1;";
 
             var ownerId = await conn.QueryFirstOrDefaultAsync<int?>(
@@ -415,7 +599,8 @@ namespace Katalog.Services
                 @"UPDATE Pesanan
                   SET idAlamat = @IdAlamat,
                       total_harga = @TotalHarga
-                  WHERE id = @Id;",
+                  WHERE id = @Id
+                      AND Deleted_At IS NULL;",
                 new
                 {
                     Id = id,
@@ -424,8 +609,13 @@ namespace Katalog.Services
                 },
                 transaction);
 
+            // Detail lama di-soft delete (bukan dihapus permanen),
+            // lalu diganti dengan baris aktif yang baru.
             await conn.ExecuteAsync(
-                "DELETE FROM Pesanan_Detail WHERE idPesanan = @Id;",
+                @"UPDATE Pesanan_Detail
+                  SET deleted_at = NOW()
+                  WHERE idPesanan = @Id
+                      AND deleted_at IS NULL;",
                 new { Id = id },
                 transaction);
 
@@ -441,9 +631,11 @@ namespace Katalog.Services
         }
 
         // =========================================================
-        // DELETE PESANAN + DETAIL
+        // DELETE PESANAN + DETAIL (SOFT DELETE)
         //
         // Hanya pemilik dan hanya jika belum ada pembayaran.
+        // Baris tidak dihapus permanen: deleted_at diisi pada
+        // pesanan dan seluruh detailnya agar histori tetap utuh.
         // =========================================================
         public async Task<bool> DeletePesananAsync(
             int id,
@@ -456,7 +648,9 @@ namespace Katalog.Services
 
             var ownerId = await conn.QueryFirstOrDefaultAsync<int?>(
                 @"SELECT id FROM Pesanan
-                  WHERE id = @Id AND idUser = @IdUser
+                  WHERE id = @Id
+                    AND idUser = @IdUser
+                    AND Deleted_At IS NULL
                   LIMIT 1;",
                 new { Id = id, IdUser = idUser },
                 transaction);
@@ -479,12 +673,18 @@ namespace Katalog.Services
             }
 
             await conn.ExecuteAsync(
-                "DELETE FROM Pesanan_Detail WHERE idPesanan = @Id;",
+                @"UPDATE Pesanan_Detail
+                  SET deleted_at = NOW()
+                  WHERE idPesanan = @Id
+                      AND deleted_at IS NULL;",
                 new { Id = id },
                 transaction);
 
             await conn.ExecuteAsync(
-                "DELETE FROM Pesanan WHERE id = @Id;",
+                @"UPDATE Pesanan
+                  SET Deleted_At = NOW()
+                  WHERE id = @Id
+                      AND Deleted_At IS NULL;",
                 new { Id = id },
                 transaction);
 
@@ -502,7 +702,10 @@ namespace Katalog.Services
             PesananDetailRequest item)
         {
             var harga = await conn.QueryFirstOrDefaultAsync<decimal?>(
-                "SELECT harga FROM product WHERE id = @IdProduct LIMIT 1;",
+                @"SELECT harga FROM product
+                  WHERE id = @IdProduct
+                      AND deleted_at IS NULL
+                  LIMIT 1;",
                 new { IdProduct = item.IdProduct },
                 transaction);
 
@@ -680,7 +883,7 @@ namespace Katalog.Services
             var ids = pesananList.Select(p => p.Id).ToList();
 
             var details = (await conn.QueryAsync<PesananDetailResponse>(
-                SelectDetail + " WHERE d.idPesanan IN @Ids;",
+                SelectDetail + " AND d.idPesanan IN @Ids;",
                 new { Ids = ids }))
                 .ToList();
 

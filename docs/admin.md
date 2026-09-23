@@ -44,7 +44,10 @@ Token didapat dari `POST /api/v1/auth/login`. Role juga bisa dicek lewat
 | Daftar & detail layanan | `GET /api/v1/layanan`, `GET /api/v1/layanan/{id}` | Bearer |
 | Tambah/ubah/hapus layanan | `POST` / `PATCH` / `DELETE` `/api/v1/layanan[/{id}]` | Bearer |
 | Daftar pesanan masuk | `GET /api/v1/pesanan/all` | `Admin` / `Petugas` |
+| Riwayat pesanan (filter tanggal/status) | `GET /api/v1/pesanan/history` | `Admin` / `Petugas` / `Pelanggan` |
 | Detail pesanan | `GET /api/v1/pesanan/{id}` | `Admin` / `Petugas` |
+| Ubah status pengerjaan pesanan | `PUT /api/v1/pesanan/{id}/status` | `Admin` |
+| Laporan penjualan | `GET /api/v1/reports/sales` | `Admin` / `Petugas` |
 | Daftar semua alamat | `GET /api/v1/alamat/all` | Bearer |
 | Alamat milik satu user | `GET /api/v1/alamat/user/{idUser}` | Bearer |
 
@@ -63,6 +66,12 @@ Pantau pesanan masuk
    ↓
 Buka detail pesanan
    → GET /api/v1/pesanan/{id}         (details[], alamat, paymentStatus)
+   ↓
+Ubah status pengerjaan (Admin)
+   → PUT /api/v1/pesanan/{id}/status  ({ "statusPengerjaan": "Selesai" })
+   ↓
+Lihat laporan penjualan
+   → GET /api/v1/reports/sales        (?startDate=&endDate=&period=day)
 ```
 
 Contoh memuat daftar pesanan untuk halaman admin:
@@ -95,7 +104,7 @@ Ini penting supaya tidak salah menampilkan tombol di frontend admin:
 | Lihat pembayaran lewat `GET /api/v1/payment/pesanan/{idPesanan}` | Hanya pemilik pesanan; admin → `404` |
 | Batalkan pembayaran pelanggan (`POST /api/v1/payment/{idPesanan}/cancel`) | Hanya pemilik pesanan |
 | Ubah / hapus alamat pelanggan (`PATCH`/`DELETE /api/v1/alamat/{id}`) | Server selalu memfilter `idUser` dari token — admin hanya bisa mengubah alamatnya sendiri |
-| Ubah status pengerjaan sebuah pesanan | **Belum ada endpoint-nya** |
+| Ubah status pengerjaan pesanan (`PUT /api/v1/pesanan/{id}/status`) | Bukan untuk role `Petugas` — endpoint ini **khusus `Admin`** (`403` untuk petugas) |
 
 Untuk status pembayaran di layar admin, pakai field `paymentStatus` pada
 `GET /api/v1/pesanan/all` atau `GET /api/v1/pesanan/{id}` — bukan endpoint
@@ -103,10 +112,16 @@ Untuk status pembayaran di layar admin, pakai field `paymentStatus` pada
 
 ## 5. Catatan
 
-- **Ubah status pengerjaan pesanan belum tersedia.** Saat ini
-  `statusPengerjaan` hanya berubah otomatis menjadi `Dibatalkan` ketika
-  pembayaran dibatalkan / kedaluwarsa. Selama endpoint-nya belum ada, layar
-  admin hanya bisa **menampilkan** status.
+- **Ubah status pengerjaan: `PUT /api/v1/pesanan/{id}/status` (khusus Admin).**
+  Terima `application/json` berisi `idStatusPengerjaan` (int) **atau**
+  `statusPengerjaan` (nama, mis. `"Selesai"`). Selain itu status masih berubah
+  otomatis menjadi `Dibatalkan` ketika pembayaran dibatalkan / kedaluwarsa.
+  Detail request/response: [pesanan.md](pesanan.md#put-apiv1pesananidstatus-admin)
+  dan [laporan.md](laporan.md).
+- **Riwayat & laporan penjualan:**
+  `GET /api/v1/pesanan/history` (Order History, paginasi + filter tanggal)
+  dan `GET /api/v1/reports/sales` (Sales Report, agregasi per `day`/`month`/`year`)
+  — lihat [laporan.md](laporan.md).
 - **Akun `Petugas` belum bisa dibuat lewat API.** `Controller/PetugasController.cs`
   masih kosong, jadi pembuatan petugas harus lewat database dulu.
 - **Otorisasi sebagian master data masih terbuka** (`kategory-product`,

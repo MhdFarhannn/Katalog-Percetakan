@@ -71,9 +71,15 @@ Base path: `/api/v1/status-pengerjaan`
 
 ```json
 [
-  { "id": 1, "nama": "Sedang Berlangsung" }
+  { "id": 1, "nama": "Sedang Berlangsung" },
+  { "id": 2, "nama": "Dibatalkan" },
+  { "id": 3, "nama": "Selesai" }
 ]
 ```
+
+> Status di atas dipakai oleh `PUT /api/v1/pesanan/{id}/status` (Admin)
+> dan berubah otomatis saat pembayaran dibatalkan. Lihat
+> [pesanan.md](pesanan.md#put-apiv1pesananidstatus-admin).
 
 ---
 

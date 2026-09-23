@@ -61,9 +61,13 @@ dipakai di tabel `product`.
 
 ## 3. Kolom Audit
 
-Semua tabel punya kolom audit berikut (nama kolom `User` dan `Pesanan` memakai
-huruf besar di awal karena mengikuti struktur database yang sudah ada —
-MySQL tidak membedakan besar/kecil huruf untuk nama kolom):
+Empat tabel transaksional (`product`, `Alamat`, `Pesanan`, `Pesanan_Detail`)
+memakai ketiga kolom audit berikut. Tabel lainya (master, `User`,
+`payments`, dll.) juga punya `created_at`/`updated_at`, tetapi **tanpa**
+`deleted_at` karena tidak menjalani soft delete (nama kolom `User` dan
+`Pesanan` memakai huruf besar di awal karena mengikuti struktur database
+yang sudah ada — MySQL tidak membedakan besar/kecil huruf untuk nama
+kolom):
 
 | Kolom | Tipe | Fungsi |
 |---|---|---|
@@ -73,8 +77,16 @@ MySQL tidak membedakan besar/kecil huruf untuk nama kolom):
 
 Kolom `updated_at` **tidak pernah** diset manual oleh kode: nilainya diurus
 MySQL melalui `ON UPDATE current_timestamp()`. Jadi setiap perubahan status
-pesanan (`PATCH /api/v1/pesanan/{id}/status`) otomatis memperbarui
+pesanan (`PUT /api/v1/pesanan/{id}/status`) otomatis memperbarui
 `Pesanan.Updated_At`, dan nilainya dikirim ke API sebagai `updatedAt`.
+
+Kolom audit per tabel:
+
+| Tabel | `created_at`/`Created_At` | `updated_at`/`Updated_At` | `deleted_at`/`Deleted_At` (soft delete) |
+|---|---|---|---|
+| `product`, `Alamat`, `Pesanan`, `Pesanan_Detail` | ✔ | ✔ | ✔ |
+| `User`, `Roles`, `Layanan`, `Ukuran_Produk`, master (`kategory_product`, `status_*`) | ✔ | ✔ | — (pakai `Is_Active` / tanpa soft delete) |
+| `payments` | ✔ | ✔ | — (bukti transaksi, tidak boleh hilang) |
 
 ## 4. Soft Delete
 
@@ -121,7 +133,7 @@ Semua service yang membaca tabel ber-soft-delete sudah menambahkan filter:
 
 Catatan: baris yang sudah di-soft delete dianggap "tidak ada" oleh API.
 `GET /api/v1/pesanan/{id}` untuk pesanan yang sudah dihapus mengembalikan
-`404`, dan `PATCH .../status` juga `404`.
+`404`, dan `PUT .../status` juga `404`.
 
 ## 5. DDL
 
@@ -141,8 +153,8 @@ mysql -u <user> -p katalog_percetakan < Schema/migration_soft_delete_audit.sql
 ```
 
 Migrasi tersebut menambahkan kolom audit & soft delete, index pendukung,
-backfill `deleted_at = NULL`, dan seed status `Selesai` — semuanya dicek lewat
-`information_schema` sehingga tidak error bila sudah ada.
+dan seed status `Selesai` — semuanya dicek lewat `information_schema`
+sehingga tidak error bila sudah ada.
 
 ### Contoh DDL inti (kutipan dari `Schema/setup.sql`)
 
@@ -339,7 +351,7 @@ hanya otomatis dari pembayaran). Bisa memakai **id** atau **nama** status.
 **Request — pakai nama status**
 
 ```http
-PATCH /api/v1/pesanan/12/status HTTP/1.1
+PUT /api/v1/pesanan/12/status HTTP/1.1
 Authorization: Bearer <token-admin>
 Content-Type: application/json
 
@@ -349,7 +361,7 @@ Content-Type: application/json
 **Request — pakai id status**
 
 ```http
-PATCH /api/v1/pesanan/12/status HTTP/1.1
+PUT /api/v1/pesanan/12/status HTTP/1.1
 Authorization: Bearer <token-admin>
 Content-Type: application/json
 
@@ -358,7 +370,7 @@ Content-Type: application/json
 
 ```js
 await fetch(`${API}/api/v1/pesanan/${id}/status`, {
-  method: "PATCH",
+  method: "PUT",
   headers: {
     "Content-Type": "application/json",
     Authorization: `Bearer ${token}`,
@@ -424,17 +436,32 @@ tambahan:
 Status yang tersedia diambil dari `GET /api/v1/status-pengerjaan`
 (seed: `1 Sedang Berlangsung`, `2 Dibatalkan`, `3 Selesai`).
 
+### 6.3. Order history & sales report
+
+Kedua endpoint pelaporan juga membaca kolom soft delete & audit:
+
+- **Order History** — `GET /api/v1/pesanan/history?startDate=&endDate=&page=&pageSize=`
+  hanya mengembalikan pesanan `Deleted_At IS NULL`, filter tanggal memakai
+  index `idx_pesanan_tanggal (Created_At, Deleted_At)`.
+  Contoh payload lengkap: [`laporan.md`](laporan.md#order-history).
+- **Sales Report** — `GET /api/v1/reports/sales?startDate=&endDate=&period=day`
+  agregasi `COUNT`/`SUM(total_harga)` per periode, pesanan ter-soft delete
+  dikeluarkan dari hitungan, pendapatan hanya dari pembayaran terakhir
+  berstatus `DIBAYAR`. Contoh payload: [`laporan.md`](laporan.md#sales-report).
+
 ## 7. Catatan Implementasi
 
 | Topik | Lokasi kode |
 |---|---|
-| Filter soft delete + resolusi `desainFilePath` | `Services/PesananServices.cs` (`ResolveDesainFilePath`, `ApplyDesainFilePath`) |
+| Filter soft delete semua query baca | `Services/PesananServices.cs`, `Services/ProductServices.cs`, `Services/AlamatServices.cs`, `Services/PaymentServices.cs` |
 | Soft delete product | `Services/ProductServices.cs` (`DeleteProductAsync`) |
 | Soft delete alamat | `Services/AlamatServices.cs` (`DeleteAlamatAsync`) |
-| Soft delete pesanan | `Services/PesananServices.cs` (`DeletePesananAsync`) |
-| Ubah status pengerjaan + otorisasi Admin | `Controller/PesananController.cs` (`PATCH /{id}/status`, `Policies.Admin`) + `Services/PesananServices.cs` (`UpdateStatusPengerjaanAsync`) |
-| Model request/response | `Models/Pesanan.cs` (`PesananStatusRequest`, `PesananStatusResult`) |
-| Upload file desain | `Controller/PesananController.cs` (`SaveDesainFilesAsync`, `NormalizeDesainPath`) |
+| Soft delete pesanan (+ detail) | `Services/PesananServices.cs` (`DeletePesananAsync`, penggantian detail di `UpdatePesananAsync`) |
+| Order history (filter tanggal/status/paginasi) | `Services/PesananServices.cs` (`GetPesananHistoryAsync`) + `Controller/PesananController.cs` (`GET /history`) |
+| Sales report (agregasi per periode) | `Services/ReportServices.cs` + `Controller/ReportController.cs` (`GET /api/v1/reports/sales`) |
+| Ubah status pengerjaan + otorisasi Admin | `Controller/PesananController.cs` (`PUT /{id}/status`, `Policies.Admin`) + `Services/PesananServices.cs` (`UpdateStatusPengerjaanAsync`, `ResolveStatusPengerjaanIdAsync`) |
+| Model request/response | `Models/Pesanan.cs` (`PesananStatusRequest`, `PesananHistoryQuery`, `PesananHistoryResponse`), `Models/Report.cs` |
+| Upload file desain | `Controller/PesananController.cs` (`SaveDesainFilesAsync`) |
 
 Hal yang perlu diperhatikan:
 
