@@ -16,7 +16,7 @@ namespace Katalog.Controller
             // GET ALL
             // ==========================================
 
-            g.MapGet("/", async (
+            app.MapGet("api/v1/layanan/", async (
                 LayananServices service) =>
             {
                 try

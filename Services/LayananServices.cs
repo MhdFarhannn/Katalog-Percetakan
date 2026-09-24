@@ -26,19 +26,19 @@ namespace Katalog.Services
         {
             using var connection = db.connect();
 
-            // Upload image
+            // Upload image jika ada
             if (image != null && image.Length > 0)
             {
                 layanan.ImagePath = await SaveImageAsync(image);
             }
 
-            const string query = @"
+            const string insertQuery = @"
                 INSERT INTO Layanan
                 (
-                    Nama,
-                    Deskripsi,
-                    ImagePath,
-                    BackgroundColor
+                    nama,
+                    deskripsi,
+                    imagePath,
+                    background_color
                 )
                 VALUES
                 (
@@ -46,12 +46,13 @@ namespace Katalog.Services
                     @Deskripsi,
                     @ImagePath,
                     @BackgroundColor
-                )";
+                );";
 
-            var id = await connection.ExecuteScalarAsync<int>(
-                query + " SELECT LAST_INSERT_ID();",
-                layanan
-            );
+            // Exec query insert terlebih dahulu
+            await connection.ExecuteAsync(insertQuery, layanan);
+
+            // Ambil ID terakhir yang di-insert dalam session koneksi yang sama
+            var id = await connection.ExecuteScalarAsync<int>("SELECT LAST_INSERT_ID();");
 
             layanan.Id = id;
 
@@ -69,13 +70,13 @@ namespace Katalog.Services
 
             const string query = @"
                 SELECT
-                    Id,
-                    Nama,
-                    Deskripsi,
-                    ImagePath,
-                    BackgroundColor
+                    id AS Id,
+                    nama AS Nama,
+                    deskripsi AS Deskripsi,
+                    imagePath AS ImagePath,
+                    background_color AS BackgroundColor
                 FROM Layanan
-                ORDER BY Id DESC";
+                ORDER BY id DESC";
 
             var result = await connection.QueryAsync<Layanan>(
                 query
@@ -95,13 +96,13 @@ namespace Katalog.Services
 
             const string query = @"
                 SELECT
-                    Id,
-                    Nama,
-                    Deskripsi,
-                    ImagePath,
-                    BackgroundColor
+                    id AS Id,
+                    nama AS Nama,
+                    deskripsi AS Deskripsi,
+                    imagePath AS ImagePath,
+                    background_color AS BackgroundColor
                 FROM Layanan
-                WHERE Id = @Id";
+                WHERE id = @Id";
 
             return await connection.QueryFirstOrDefaultAsync<Layanan>(
                 query,
@@ -111,7 +112,7 @@ namespace Katalog.Services
 
 
         // ==========================================
-        // PATCH
+        // PATCH / UPDATE
         // ==========================================
 
         public async Task<Layanan?> PatchLayananAsync(
@@ -124,13 +125,13 @@ namespace Katalog.Services
             // Ambil data lama
             const string getQuery = @"
                 SELECT
-                    Id,
-                    Nama,
-                    Deskripsi,
-                    ImagePath,
-                    BackgroundColor
+                    id AS Id,
+                    nama AS Nama,
+                    deskripsi AS Deskripsi,
+                    imagePath AS ImagePath,
+                    background_color AS BackgroundColor
                 FROM Layanan
-                WHERE Id = @Id";
+                WHERE id = @Id";
 
             var oldLayanan =
                 await connection.QueryFirstOrDefaultAsync<Layanan>(
@@ -154,19 +155,18 @@ namespace Katalog.Services
             }
             else
             {
-                // Jika tidak upload image,
-                // gunakan image lama
+                // Jika tidak upload image, gunakan image lama
                 layanan.ImagePath = oldLayanan.ImagePath;
             }
 
             const string updateQuery = @"
                 UPDATE Layanan
                 SET
-                    Nama = @Nama,
-                    Deskripsi = @Deskripsi,
-                    ImagePath = @ImagePath,
-                    BackgroundColor = @BackgroundColor
-                WHERE Id = @Id";
+                    nama = @Nama,
+                    deskripsi = @Deskripsi,
+                    imagePath = @ImagePath,
+                    background_color = @BackgroundColor
+                WHERE id = @Id";
 
             await connection.ExecuteAsync(
                 updateQuery,
@@ -196,9 +196,9 @@ namespace Katalog.Services
 
             // Ambil data
             const string getQuery = @"
-                SELECT ImagePath
+                SELECT imagePath AS ImagePath
                 FROM Layanan
-                WHERE Id = @Id";
+                WHERE id = @Id";
 
             var layanan =
                 await connection.QueryFirstOrDefaultAsync<Layanan>(
@@ -214,7 +214,7 @@ namespace Katalog.Services
             // Hapus database
             const string deleteQuery = @"
                 DELETE FROM Layanan
-                WHERE Id = @Id";
+                WHERE id = @Id";
 
             var result = await connection.ExecuteAsync(
                 deleteQuery,

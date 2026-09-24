@@ -5,7 +5,7 @@ dan layanan.
 
 > **Catatan otorisasi (sesuai kode saat ini):**
 > - `kategory-product`, `status-product`, `status-pengerjaan`: **tanpa auth**.
-> - `products`: `GET` publik; `POST` butuh role `Admin`; `PUT`/`DELETE` tanpa auth.
+> - `products`: `GET` publik; `POST` butuh role `Admin`; `PATCH`/`DELETE` tanpa auth.
 > - `layanan`: butuh auth (`Admin`/`Petugas`/`Pelanggan`).
 
 ---
@@ -91,7 +91,7 @@ Base path: `/api/v1/products`
 |---|---|---|---|
 | GET | `/api/v1/products` | Tidak | — |
 | POST | `/api/v1/products` | `Admin` | `multipart/form-data` |
-| PUT | `/api/v1/products/{id}` | Tidak | `application/json` |
+| PATCH | `/api/v1/products/{id}` | Tidak | `application/json` |
 | DELETE | `/api/v1/products/{id}` | Tidak | — |
 
 ## GET /api/v1/products
@@ -149,7 +149,7 @@ await fetch(`${API}/api/v1/products`, {
 });
 ```
 
-## PUT /api/v1/products/{id}
+## PATCH /api/v1/products/{id}
 
 **Request (JSON)**
 

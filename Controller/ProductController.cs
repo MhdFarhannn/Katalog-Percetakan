@@ -125,7 +125,7 @@ namespace Katalog.Controller
             // });
 
             // EDIT PRODUCT
-            g.MapPut("/{id}", async (
+            g.MapPatch("/{id}", async (
                 ProductServices service,
                 int id,
                 Product product) =>

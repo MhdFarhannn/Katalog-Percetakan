@@ -26,7 +26,8 @@ builder.Services.AddCors(options =>
                     "https://yourdomain.com",
                     "http://127.0.0.1:5174",
                     "http://100.77.23.34:5174",
-                    "http://fyonietz.tail45709d.ts.net:5174"
+                    "http://fyonietz.tail45709d.ts.net:5174",
+                    "http://192.168.69.50.nip.io:5174"
               )
               .AllowAnyMethod()
               .AllowAnyHeader()
@@ -147,7 +148,12 @@ builder.Services.AddScoped<AuthServices>();
 var app = builder.Build();
 
 app.UseStaticFiles();
-
+app.Use(async (context, next) =>
+{
+    // Mengizinkan popup berkomunikasi kembali ke jendela utama
+    context.Response.Headers.Append("Cross-Origin-Opener-Policy", "same-origin-allow-popups");
+    await next();
+});
 app.UseCors("AllowWebFrontend");
 //app.UseAuthentication();
 app.UseAuthorization();

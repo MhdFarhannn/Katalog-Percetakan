@@ -126,25 +126,23 @@ namespace Katalog.Services
         // }
 
         // EDIT PRODUCT
-        public async Task<bool> UpdateProductAsync(
-            int id,
-            Product product)
+        public async Task<bool> UpdateProductAsync(int id, Product product)
         {
             using var conn = db.connect();
-
+        
             const string query = @"
                 UPDATE product
                 SET
-                    idKategoriProduct = @IdKategoriProduct,
-                    idStatusProduct = @IdStatusProduct,
-                    nama = @Nama,
-                    deskripsi = @Deskripsi,
-                    imagePath = @ImagePath,
-                    harga = @Harga,
-                    background_color = @BackgroundColor
+                    idKategoriProduct = COALESCE(@IdKategoriProduct, idKategoriProduct),
+                    idStatusProduct   = COALESCE(@IdStatusProduct, idStatusProduct),
+                    nama              = COALESCE(@Nama, nama),
+                    deskripsi         = COALESCE(@Deskripsi, deskripsi),
+                    imagePath         = COALESCE(@ImagePath, imagePath),
+                    harga             = COALESCE(@Harga, harga),
+                    background_color  = COALESCE(@BackgroundColor, background_color)
                 WHERE id = @Id
-                    AND deleted_at IS NULL";
-
+                  AND deleted_at IS NULL";
+        
             var result = await conn.ExecuteAsync(query, new
             {
                 Id = id,
@@ -156,7 +154,7 @@ namespace Katalog.Services
                 product.Harga,
                 product.BackgroundColor
             });
-
+        
             return result > 0;
         }
 

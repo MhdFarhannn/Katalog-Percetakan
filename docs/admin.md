@@ -40,7 +40,7 @@ Token didapat dari `POST /api/v1/auth/login`. Role juga bisa dicek lewat
 | Kelola status pengerjaan | `POST` / `PATCH` / `DELETE` `/api/v1/status-pengerjaan[/{id}]` | publik |
 | Daftar produk | `GET /api/v1/products` | publik |
 | Tambah produk | `POST /api/v1/products` | `Admin` |
-| Ubah / hapus produk | `PUT` / `DELETE` `/api/v1/products/{id}` | publik |
+| Ubah / hapus produk | `PATCH` / `DELETE` `/api/v1/products/{id}` | publik |
 | Daftar & detail layanan | `GET /api/v1/layanan`, `GET /api/v1/layanan/{id}` | Bearer |
 | Tambah/ubah/hapus layanan | `POST` / `PATCH` / `DELETE` `/api/v1/layanan[/{id}]` | Bearer |
 | Daftar pesanan masuk | `GET /api/v1/pesanan/all` | `Admin` / `Petugas` |
@@ -125,9 +125,9 @@ Untuk status pembayaran di layar admin, pakai field `paymentStatus` pada
 - **Akun `Petugas` belum bisa dibuat lewat API.** `Controller/PetugasController.cs`
   masih kosong, jadi pembuatan petugas harus lewat database dulu.
 - **Otorisasi sebagian master data masih terbuka** (`kategory-product`,
-  `status-product`, `status-pengerjaan`, serta `PUT`/`DELETE /api/v1/products`
+  `status-product`, `status-pengerjaan`, serta `PATCH`/`DELETE /api/v1/products`
   belum dibatasi role). Jangan mengandalkan role untuk menyembunyikan aksi
   tulis master data — lihat catatan di [master-data.md](master-data.md).
 - Produk dibuat dengan **`multipart/form-data`** (field `Image` file), sedangkan
-  `PUT /api/v1/products/{id}` memakai **JSON**. Layanan selalu multipart.
+  `PATCH /api/v1/products/{id}` memakai **JSON**. Layanan selalu multipart.
 - Pesanan (`POST`/`PUT /api/v1/pesanan`) wajib `multipart/form-data`, bukan JSON.

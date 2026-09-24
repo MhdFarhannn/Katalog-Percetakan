@@ -58,7 +58,7 @@ Authorization: Bearer <token>
 |---|---|---|---|
 | Katalog: `GET /api/v1/products`, `GET /api/v1/layanan` | ✔ | ✔ | ✔ |
 | `POST /api/v1/products` | ✖ | ✖ | ✔ |
-| Kelola katalog lain (layanan, kategori, status, `PUT`/`DELETE` product) | ⚠ * | ⚠ * | ✔ |
+| Kelola katalog lain (layanan, kategori, status, `PATCH`/`DELETE` product) | ⚠ * | ⚠ * | ✔ |
 | Alamat (`/api/v1/alamat`) | ✔ (miliknya) | ✔ (miliknya) | ✔ (miliknya) |
 | `GET /api/v1/pesanan/all` | ✖ (`403`) | ✔ | ✔ |
 | `GET /api/v1/pesanan/history` | miliknya | semua pesanan | semua pesanan |
@@ -70,7 +70,7 @@ Authorization: Bearer <token>
 | Kelola petugas | — | — | ⚠ belum ada endpoint |
 
 > \* Beberapa endpoint tulis master data **belum dibatasi role** di server
-> (mis. `PUT`/`DELETE /api/v1/products` publik, `POST`/`PATCH`/`DELETE
+> (mis. `PATCH`/`DELETE /api/v1/products` publik, `POST`/`PATCH`/`DELETE
 > /api/v1/layanan` bisa dipakai semua role yang login). Yang benar-benar
 > dibatasi `Admin` baru `POST /api/v1/products`. Detail: [admin.md](admin.md).
 >
