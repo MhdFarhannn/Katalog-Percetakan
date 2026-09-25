@@ -85,6 +85,15 @@ namespace Katalog.Models
 
         public int Qty { get; set; }
 
+        // Dimensi custom (hanya dipakai product PerArea / PerLength).
+        // Satuannya mengikuti product.dimension_unit (cm / meter).
+        // TIDAK ada field harga di sini: harga dihitung server.
+        public decimal? Width { get; set; }
+
+        public decimal? Height { get; set; }
+
+        public decimal? Length { get; set; }
+
         public string? Notes { get; set; }
 
         public string? DesainFilePath { get; set; }
@@ -148,7 +157,26 @@ namespace Katalog.Models
 
         public int Qty { get; set; }
 
+        // Rate snapshot: per unit / per m2 / per meter (sesuai mode).
         public decimal HargaSatuan { get; set; }
+
+        // Snapshot pricing supaya harga lama tidak berubah walau
+        // konfigurasi product diubah kemudian.
+        public string? PricingMode { get; set; }
+
+        public decimal? WidthMeters { get; set; }
+
+        public decimal? HeightMeters { get; set; }
+
+        public decimal? LengthMeters { get; set; }
+
+        public string? DimensionUnit { get; set; }
+
+        // Dihitung saat query (width_m x height_m), bukan disimpan.
+        public decimal? AreaM2 { get; set; }
+
+        // COALESCE(subtotal, harga_satuan x qty) untuk baris lama.
+        public decimal Subtotal { get; set; }
 
         public string? Notes { get; set; }
 

@@ -90,6 +90,7 @@ Base path: `/api/v1/products`
 | Method | Endpoint | Auth | Content-Type |
 |---|---|---|---|
 | GET | `/api/v1/products` | Tidak | — |
+| GET | `/api/v1/products/{id}/ukuran` | Tidak | — |
 | POST | `/api/v1/products` | `Admin` | `multipart/form-data` |
 | PATCH | `/api/v1/products/{id}` | Tidak | `application/json` |
 | DELETE | `/api/v1/products/{id}` | Tidak | — |
@@ -109,6 +110,8 @@ Base path: `/api/v1/products`
     "imagePath": "/images/abc.png",
     "harga": 100000.00,
     "diskon": 0,
+    "pricingMode": "Fixed",
+    "dimensionUnit": "meter",
     "backgroundColor": null,
     "kategoryProduct": { "id": 2, "nama": "Percetakan" },
     "statusProduct": { "id": 2, "nama": "Tersedia" }
@@ -127,8 +130,13 @@ Base path: `/api/v1/products`
 | `Nama` | string | Ya |
 | `Deskripsi` | string | Tidak |
 | `Harga` | decimal | Ya |
+| `PricingMode` | string | Tidak | `Fixed` / `PerArea` / `PerLength` / `PerUnit`. Default `Fixed` |
+| `DimensionUnit` | string | Tidak | `centimeter` / `meter`. Default `meter` |
 | `BackgroundColor` | string | Tidak |
 | `Image` | file | Tidak |
+
+> Rincian arti `PricingMode`/`DimensionUnit`, rumus harga, dan cara
+> menambah product baru ada di [pricing-system.md](pricing-system.md).
 
 **Response 200** — mengembalikan payload product yang dikirim.
 Catatan: `id` **belum terisi** pada response (server belum mengembalikan id).
@@ -161,11 +169,37 @@ await fetch(`${API}/api/v1/products`, {
   "deskripsi": "Cetak bodi motor",
   "imagePath": "/images/abc.png",
   "harga": 120000,
+  "pricingMode": "PerArea",
+  "dimensionUnit": "meter",
   "backgroundColor": null
 }
 ```
 
 **Response 200** — body kosong. **404** bila product tidak ditemukan.
+
+## GET /api/v1/products/{id}/ukuran
+
+Daftar varian (`Ukuran_Produk`) sebuah product: nama ukuran, harga, dan
+opsi dimensi tetap (cm). Dipakai frontend untuk menampilkan pilihan ukuran
+pada product ber-`pricingMode` `Fixed`.
+
+**Response 200**
+
+```json
+[
+  {
+    "id": 3,
+    "idProduct": 5,
+    "nama": "60 x 160 cm",
+    "hargaTambahan": 0.00,
+    "harga": 150000.00,
+    "panjangCm": 60,
+    "lebarCm": 160
+  }
+]
+```
+
+**Response 200** — `[]` bila product tidak punya varian.
 
 ## DELETE /api/v1/products/{id}
 

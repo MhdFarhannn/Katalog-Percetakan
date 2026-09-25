@@ -26,6 +26,7 @@ Dokumen teknis per fitur:
 | [payment.md](payment.md) | Pembuatan, pembatalan, dan status pembayaran Midtrans Snap |
 | [frontend-snap.md](frontend-snap.md) | Integrasi Midtrans Snap di frontend |
 | [schema.md](schema.md) | Skema database, kolom audit & soft delete |
+| [pricing-system.md](pricing-system.md) | Sistem harga per product (pricing mode, rumus, satuan, migrasi) |
 
 ## Base URL
 

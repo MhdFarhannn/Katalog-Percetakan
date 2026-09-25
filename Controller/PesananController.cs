@@ -230,6 +230,7 @@ namespace Katalog.Controller
 
             pesanan.MapPost("/", async (
                 PesananServices service,
+                PricingServices pricing,
                 IWebHostEnvironment environment,
                 HttpContext httpContext) =>
             {
@@ -259,6 +260,7 @@ namespace Katalog.Controller
 
                     var validation = await ValidateAsync(
                         service,
+                        pricing,
                         request,
                         idUser.Value);
 
@@ -304,6 +306,7 @@ namespace Katalog.Controller
 
             pesanan.MapPut("/{id}", async (
                 PesananServices service,
+                PricingServices pricing,
                 IWebHostEnvironment environment,
                 int id,
                 HttpContext httpContext) =>
@@ -334,6 +337,7 @@ namespace Katalog.Controller
 
                     var validation = await ValidateAsync(
                         service,
+                        pricing,
                         request,
                         idUser.Value);
 
@@ -507,6 +511,7 @@ namespace Katalog.Controller
         // =========================================================
         private static async Task<IResult?> ValidateAsync(
             PesananServices service,
+            PricingServices pricing,
             PesananRequest request,
             int idUser)
         {
@@ -581,6 +586,36 @@ namespace Katalog.Controller
                             message = $"Ukuran tidak sesuai dengan produk {item.IdProduct}"
                         });
                     }
+                }
+
+                // Validasi & hitung harga sesuai pricing mode product.
+                // Perhitungan final tetap diulang di dalam transaksi
+                // PesananServices (sumber kebenaran harga).
+                var pricingResult = await pricing.EvaluateAsync(
+                    new PricingInput
+                    {
+                        IdProduct = item.IdProduct,
+                        IdUkuranProduk = item.IdUkuranProduk,
+                        Quantity = item.Qty,
+                        Width = item.Width,
+                        Height = item.Height,
+                        Length = item.Length
+                    });
+
+                if (pricingResult == null)
+                {
+                    return Results.BadRequest(new
+                    {
+                        message = $"Ukuran tidak sesuai dengan produk {item.IdProduct}"
+                    });
+                }
+
+                if (!pricingResult.Success)
+                {
+                    return Results.BadRequest(new
+                    {
+                        message = pricingResult.Error
+                    });
                 }
             }
 
@@ -695,6 +730,9 @@ namespace Katalog.Controller
                     UkuranCustom =
                         form[$"{prefix}ukuranCustom"],
                     Qty = ParseInt(form[$"{prefix}qty"]) ?? 0,
+                    Width = ParseDecimal(form[$"{prefix}width"]),
+                    Height = ParseDecimal(form[$"{prefix}height"]),
+                    Length = ParseDecimal(form[$"{prefix}length"]),
                     Notes = form[$"{prefix}notes"],
                     DesainText = form[$"{prefix}desainText"]
                 };
@@ -715,6 +753,24 @@ namespace Katalog.Controller
                 : null;
         }
 
+        // Dimensi dikirim sebagai angka desimal pada satuan yang
+        // dikonfigurasi product (cm / meter). Nilai kosong = null.
+        private static decimal? ParseDecimal(string? value)
+        {
+            if (string.IsNullOrWhiteSpace(value))
+            {
+                return null;
+            }
+
+            return decimal.TryParse(
+                value,
+                System.Globalization.NumberStyles.Number,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var result)
+                ? result
+                : null;
+        }
+
         // =========================================================
         // SIMPAN FILE DESAIN
         //
@@ -728,36 +784,36 @@ namespace Katalog.Controller
             List<PesananDetailRequest> items)
         {
             Console.WriteLine($"[DEBUG] Total Items: {items.Count}");
-        
+
             foreach (var item in items)
             {
                 var desain = item.Desain;
-        
+
                 if (desain == null || desain.Length == 0)
                 {
                     Console.WriteLine("[DEBUG] File Desain NULL atau Kosong!");
                     continue;
                 }
-        
+
                 Console.WriteLine($"[DEBUG] File Diterima: {desain.FileName}, Size: {desain.Length} bytes");
-        
+
                 var rootPath = !string.IsNullOrEmpty(environment.WebRootPath)
                     ? environment.WebRootPath
                     : Path.Combine(environment.ContentRootPath, "wwwroot");
-        
+
                 var folderPath = Path.Combine(rootPath, "images", "desain");
-        
+
                 if (!Directory.Exists(folderPath))
                 {
                     Directory.CreateDirectory(folderPath);
                 }
-        
+
                 var fileName = Guid.NewGuid().ToString() + Path.GetExtension(desain.FileName);
                 var filePath = Path.Combine(folderPath, fileName);
-        
+
                 await using var stream = new FileStream(filePath, FileMode.Create);
                 await desain.CopyToAsync(stream);
-        
+
                 item.DesainFilePath = "/images/desain/" + fileName;
                 Console.WriteLine($"[DEBUG] File Berhasil Disimpan ke: {filePath}");
             }

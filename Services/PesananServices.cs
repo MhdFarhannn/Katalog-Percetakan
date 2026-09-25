@@ -60,6 +60,17 @@ namespace Katalog.Services
                 d.ukuran_custom AS UkuranCustom,
                 d.qty AS Qty,
                 d.harga_satuan AS HargaSatuan,
+                d.pricing_mode AS PricingMode,
+                d.width_m AS WidthMeters,
+                d.height_m AS HeightMeters,
+                d.length_m AS LengthMeters,
+                d.dimension_unit AS DimensionUnit,
+                CASE
+                    WHEN d.width_m IS NOT NULL AND d.height_m IS NOT NULL
+                    THEN d.width_m * d.height_m
+                    ELSE NULL
+                END AS AreaM2,
+                COALESCE(d.subtotal, d.harga_satuan * d.qty) AS Subtotal,
                 d.notes AS Notes,
                 d.desain_file_path AS DesainFilePath, -- Dipetakan ke PesananDetailResponse.DesainFilePath
                 d.desain_text AS DesainText
@@ -450,33 +461,31 @@ namespace Katalog.Services
                 return null;
             }
 
-            var details = new List<PesananDetailRequest>();
+            var details = new List<PricedItem>();
             decimal totalHarga = 0;
 
             foreach (var item in request.Items)
             {
-                var harga = await GetHargaSatuanAsync(
+                // Harga SELALU dihitung ulang di server memakai
+                // konfigurasi pricing product. Nilai dari client
+                // tidak pernah dipakai.
+                var harga = await PricingServices.EvaluateAsync(
                     conn,
                     transaction,
-                    item);
+                    ToPricingInput(item));
 
-                if (harga == null)
+                if (harga == null || !harga.Success)
                 {
                     transaction.Rollback();
                     return null;
                 }
 
-                totalHarga += harga.Value * item.Qty;
+                totalHarga += harga.Subtotal;
 
-                details.Add(new PesananDetailRequest
+                details.Add(new PricedItem
                 {
-                    IdProduct = item.IdProduct,
-                    IdUkuranProduk = item.IdUkuranProduk,
-                    UkuranCustom = item.UkuranCustom,
-                    Qty = item.Qty,
-                    Notes = item.Notes,
-                    DesainFilePath = item.DesainFilePath,
-                    DesainText = item.DesainText
+                    Item = item,
+                    Pricing = harga
                 });
             }
 
@@ -565,33 +574,31 @@ namespace Katalog.Services
                 return null;
             }
 
-            var details = new List<PesananDetailRequest>();
+            var details = new List<PricedItem>();
             decimal totalHarga = 0;
 
             foreach (var item in request.Items)
             {
-                var harga = await GetHargaSatuanAsync(
+                // Harga SELALU dihitung ulang di server memakai
+                // konfigurasi pricing product. Nilai dari client
+                // tidak pernah dipakai.
+                var harga = await PricingServices.EvaluateAsync(
                     conn,
                     transaction,
-                    item);
+                    ToPricingInput(item));
 
-                if (harga == null)
+                if (harga == null || !harga.Success)
                 {
                     transaction.Rollback();
                     return null;
                 }
 
-                totalHarga += harga.Value * item.Qty;
+                totalHarga += harga.Subtotal;
 
-                details.Add(new PesananDetailRequest
+                details.Add(new PricedItem
                 {
-                    IdProduct = item.IdProduct,
-                    IdUkuranProduk = item.IdUkuranProduk,
-                    UkuranCustom = item.UkuranCustom,
-                    Qty = item.Qty,
-                    Notes = item.Notes,
-                    DesainFilePath = item.DesainFilePath,
-                    DesainText = item.DesainText
+                    Item = item,
+                    Pricing = harga
                 });
             }
 
@@ -694,61 +701,38 @@ namespace Katalog.Services
         }
 
         // =========================================================
-        // HELPER
+        // HELPER PRICING
+        //
+        // Item + snapshot harga hasil perhitungan server. Snapshot
+        // ini yang disimpan ke Pesanan_Detail supaya harga lama
+        // tidak berubah ketika konfigurasi product diubah.
         // =========================================================
-        private static async Task<decimal?> GetHargaSatuanAsync(
-            MySql.Data.MySqlClient.MySqlConnection conn,
-            MySql.Data.MySqlClient.MySqlTransaction transaction,
+        private sealed class PricedItem
+        {
+            public PesananDetailRequest Item { get; init; } = null!;
+
+            public PricingResult Pricing { get; init; } = null!;
+        }
+
+        private static PricingInput ToPricingInput(
             PesananDetailRequest item)
         {
-            var harga = await conn.QueryFirstOrDefaultAsync<decimal?>(
-                @"SELECT harga FROM product
-                  WHERE id = @IdProduct
-                      AND deleted_at IS NULL
-                  LIMIT 1;",
-                new { IdProduct = item.IdProduct },
-                transaction);
-
-            if (harga == null)
+            return new PricingInput
             {
-                return null;
-            }
-
-            var hargaSatuan = harga.Value;
-
-            if (item.IdUkuranProduk.HasValue)
-            {
-                var tambahan =
-                    await conn.QueryFirstOrDefaultAsync<decimal?>(
-                        @"SELECT harga_tambahan
-                          FROM Ukuran_Produk
-                          WHERE id = @IdUkuranProduk
-                              AND idProduct = @IdProduct
-                          LIMIT 1;",
-                        new
-                        {
-                            IdUkuranProduk = item.IdUkuranProduk,
-                            IdProduct = item.IdProduct
-                        },
-                        transaction);
-
-                // Ukuran tidak valid untuk product ini
-                if (tambahan == null)
-                {
-                    return null;
-                }
-
-                hargaSatuan += tambahan.Value;
-            }
-
-            return hargaSatuan;
+                IdProduct = item.IdProduct,
+                IdUkuranProduk = item.IdUkuranProduk,
+                Quantity = item.Qty,
+                Width = item.Width,
+                Height = item.Height,
+                Length = item.Length
+            };
         }
 
         private static async Task InsertDetailsAsync(
             MySql.Data.MySqlClient.MySqlConnection conn,
             MySql.Data.MySqlClient.MySqlTransaction transaction,
             int idPesanan,
-            List<PesananDetailRequest> details)
+            List<PricedItem> details)
         {
             const string insertDetail = @"
                 INSERT INTO Pesanan_Detail
@@ -759,6 +743,12 @@ namespace Katalog.Services
                     ukuran_custom,
                     qty,
                     harga_satuan,
+                    pricing_mode,
+                    width_m,
+                    height_m,
+                    length_m,
+                    dimension_unit,
+                    subtotal,
                     notes,
                     desain_file_path,
                     desain_text
@@ -771,17 +761,21 @@ namespace Katalog.Services
                     @UkuranCustom,
                     @Qty,
                     @HargaSatuan,
+                    @PricingMode,
+                    @WidthMeters,
+                    @HeightMeters,
+                    @LengthMeters,
+                    @DimensionUnit,
+                    @Subtotal,
                     @Notes,
                     @DesainFilePath,
                     @DesainText
                 );";
 
-            foreach (var item in details)
+            foreach (var detail in details)
             {
-                var harga = await GetHargaSatuanAsync(
-                    conn,
-                    transaction,
-                    item);
+                var item = detail.Item;
+                var harga = detail.Pricing;
 
                 await conn.ExecuteAsync(
                     insertDetail,
@@ -792,7 +786,13 @@ namespace Katalog.Services
                         IdUkuranProduk = item.IdUkuranProduk,
                         UkuranCustom = item.UkuranCustom,
                         Qty = item.Qty,
-                        HargaSatuan = harga ?? 0,
+                        HargaSatuan = harga.UnitPrice,
+                        PricingMode = PricingUnits.ToCode(harga.Mode),
+                        WidthMeters = harga.WidthMeters,
+                        HeightMeters = harga.HeightMeters,
+                        LengthMeters = harga.LengthMeters,
+                        DimensionUnit = PricingUnits.ToCode(harga.Unit),
+                        Subtotal = harga.Subtotal,
                         Notes = item.Notes,
                         DesainFilePath = item.DesainFilePath,
                         DesainText = item.DesainText

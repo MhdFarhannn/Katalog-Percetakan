@@ -150,11 +150,17 @@ pakai migrasi yang idempotent (aman dijalankan berulang):
 
 ```bash
 mysql -u <user> -p katalog_percetakan < Schema/migration_soft_delete_audit.sql
+mysql -u <user> -p katalog_percetakan < Schema/migration_pricing_modes.sql
 ```
 
-Migrasi tersebut menambahkan kolom audit & soft delete, index pendukung,
-dan seed status `Selesai` — semuanya dicek lewat `information_schema`
-sehingga tidak error bila sudah ada.
+Migrasi audit/soft delete menambahkan kolom audit & soft delete, index
+pendukung, dan seed status `Selesai`. Migrasi pricing menambahkan kolom
+konfigurasi harga (`product.pricing_mode`, `product.dimension_unit`),
+dimensi/harga varian (`Ukuran_Produk.panjang_cm`, `lebar_cm`, `harga`), dan
+snapshot harga pada `Pesanan_Detail` (`pricing_mode`, `width_m`, `height_m`,
+`length_m`, `dimension_unit`, `subtotal`). Keduanya dicek lewat
+`information_schema` sehingga tidak error bila sudah ada. Rincian sistem
+harga ada di [pricing-system.md](pricing-system.md).
 
 ### Contoh DDL inti (kutipan dari `Schema/setup.sql`)
 
@@ -170,6 +176,8 @@ CREATE TABLE IF NOT EXISTS product (
     harga DECIMAL(15,2) NOT NULL,
     background_color VARCHAR(25) NULL,
     diskon DECIMAL(15,2) NULL,
+    pricing_mode VARCHAR(20) NOT NULL DEFAULT 'Fixed',
+    dimension_unit VARCHAR(20) NOT NULL DEFAULT 'meter',
     created_at TIMESTAMP NULL DEFAULT current_timestamp(),
     updated_at TIMESTAMP NULL DEFAULT current_timestamp() ON UPDATE current_timestamp(),
     deleted_at TIMESTAMP NULL DEFAULT NULL,
@@ -216,6 +224,12 @@ CREATE TABLE IF NOT EXISTS Pesanan_Detail (
     ukuran_custom VARCHAR(100) NULL,
     qty INT NOT NULL DEFAULT 1,
     harga_satuan DECIMAL(15,2) NOT NULL,
+    pricing_mode VARCHAR(20) NULL,
+    width_m DECIMAL(12,4) NULL,
+    height_m DECIMAL(12,4) NULL,
+    length_m DECIMAL(12,4) NULL,
+    dimension_unit VARCHAR(20) NULL,
+    subtotal DECIMAL(15,2) NULL,
     notes TEXT NULL,
     desain_file_path VARCHAR(255) NULL,
     desain_text TEXT NULL,

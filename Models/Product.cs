@@ -17,7 +17,14 @@ namespace Katalog.Models
         public decimal Harga { get; set; }
 
         public decimal Diskon { get; set; }
-        
+
+        // Cara harga dihitung (Fixed / PerArea / PerLength / PerUnit /
+        // Custom). NULL pada PATCH berarti "jangan diubah"; saat
+        // insert NULL diisi default Fixed oleh controller/service.
+        public string? PricingMode { get; set; }
+
+        // Satuan input dimensi dari customer (cm / meter).
+        public string? DimensionUnit { get; set; }
 
         public string? BackgroundColor { get; set; }
 

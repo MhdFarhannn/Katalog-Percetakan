@@ -95,6 +95,9 @@ Selamat Ulang Tahun
 | `items[N].idUkuranProduk` | int? | Tidak | Harus milik product terkait. Kosongkan bila tidak dipakai |
 | `items[N].ukuranCustom` | string? | Tidak | Ukuran bebas |
 | `items[N].qty` | int | Ya | Minimal 1 |
+| `items[N].width` | decimal? | Tidak | Lebar, dipakai product `PerArea`. Satuan = `product.dimensionUnit` |
+| `items[N].height` | decimal? | Tidak | Tinggi, dipakai product `PerArea` |
+| `items[N].length` | decimal? | Tidak | Panjang, dipakai product `PerLength` |
 | `items[N].notes` | string? | Tidak | Catatan item |
 | `items[N].desain` | file | Tidak | **File desain** dikirim sebagai multipart file field (bukan Base64, bukan JSON) |
 | `items[N].desainText` | string? | Tidak | Teks desain |
@@ -103,9 +106,10 @@ Selamat Ulang Tahun
 > (`desainFilePath`) **dibuat server** dari file multipart yang diupload
 > (`items[N].desain`) dan hanya muncul di response.
 >
-> `hargaSatuan` dan `totalHarga` juga **dihitung server** dari
-> `product.harga` (+ `Ukuran_Produk.harga_tambahan`). Frontend **tidak**
-> mengirim harga.
+> `hargaSatuan`, `subtotal`, dan `totalHarga` juga **dihitung server**
+> berdasarkan `product.pricingMode` + konfigurasi harga. Frontend **tidak**
+> mengirim harga. Rincian tiap pricing mode ada di
+> [pricing-system.md](pricing-system.md).
 
 ### `PesananResponse`
 
@@ -133,6 +137,13 @@ Selamat Ulang Tahun
       "ukuranCustom": null,
       "qty": 1,
       "hargaSatuan": 100000.00,
+      "pricingMode": "Fixed",
+      "widthMeters": null,
+      "heightMeters": null,
+      "lengthMeters": null,
+      "dimensionUnit": "meter",
+      "areaM2": null,
+      "subtotal": 100000.00,
       "notes": "Cetak warna",
       "desainFilePath": null,
       "desainText": "Selamat Ulang Tahun"

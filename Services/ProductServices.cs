@@ -26,6 +26,8 @@ namespace Katalog.Services
                     deskripsi,
                     imagePath,
                     harga,
+                    pricing_mode,
+                    dimension_unit,
                     background_color
                 )
                 VALUES
@@ -36,6 +38,8 @@ namespace Katalog.Services
                     @Deskripsi,
                     @ImagePath,
                     @Harga,
+                    @PricingMode,
+                    @DimensionUnit,
                     @BackgroundColor
                 )";
 
@@ -49,7 +53,7 @@ namespace Katalog.Services
         public async Task<List<Product>> GetAllProductsAsync()
         {
             using var conn = db.connect();
-        
+
             const string query = @"
                 SELECT
                     p.id AS Id,
@@ -60,6 +64,8 @@ namespace Katalog.Services
                     p.imagePath AS ImagePath,
                     p.harga AS Harga,
                     p.diskon AS Diskon,
+                    p.pricing_mode AS PricingMode,
+                    p.dimension_unit AS DimensionUnit,
                     p.background_color AS BackgroundColor,
         
                     kp.id AS Id,
@@ -78,7 +84,7 @@ namespace Katalog.Services
 
                 WHERE p.deleted_at IS NULL
             ";
-        
+
             var result = await conn.QueryAsync<
                 Product,
                 KategoryProduct,
@@ -90,12 +96,12 @@ namespace Katalog.Services
                 {
                     product.KategoryProduct = kategory;
                     product.StatusProduct = status;
-        
+
                     return product;
                 },
                 splitOn: "Id,Id"
             );
-        
+
             return result.ToList();
         }
 
@@ -129,7 +135,7 @@ namespace Katalog.Services
         public async Task<bool> UpdateProductAsync(int id, Product product)
         {
             using var conn = db.connect();
-        
+
             const string query = @"
                 UPDATE product
                 SET
@@ -139,10 +145,12 @@ namespace Katalog.Services
                     deskripsi         = COALESCE(@Deskripsi, deskripsi),
                     imagePath         = COALESCE(@ImagePath, imagePath),
                     harga             = COALESCE(@Harga, harga),
+                    pricing_mode      = COALESCE(@PricingMode, pricing_mode),
+                    dimension_unit    = COALESCE(@DimensionUnit, dimension_unit),
                     background_color  = COALESCE(@BackgroundColor, background_color)
                 WHERE id = @Id
                   AND deleted_at IS NULL";
-        
+
             var result = await conn.ExecuteAsync(query, new
             {
                 Id = id,
@@ -152,9 +160,11 @@ namespace Katalog.Services
                 product.Deskripsi,
                 product.ImagePath,
                 product.Harga,
+                product.PricingMode,
+                product.DimensionUnit,
                 product.BackgroundColor
             });
-        
+
             return result > 0;
         }
 

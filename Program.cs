@@ -67,6 +67,9 @@ builder.Services.AddScoped<AlamatServices>();
 //Layanan Services
 builder.Services.AddScoped<LayananServices>();
 
+//Pricing Services (kalkulasi harga per product)
+builder.Services.AddScoped<PricingServices>();
+
 //Pesanan Services
 builder.Services.AddScoped<PesananServices>();
 
