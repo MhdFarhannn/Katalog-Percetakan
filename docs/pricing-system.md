@@ -320,6 +320,19 @@ Read query memakai `COALESCE(d.subtotal, d.harga_satuan * d.qty)` sehingga baris
 lama (sebelum migrasi) tetap benar. `areaM2` dihitung ulang saat query
 (`width_m * height_m`) karena tidak perlu disimpan.
 
+### 13.1 Invariant ke Midtrans
+
+`PaymentServices.CreatePaymentAsync` **wajib** memakai `subtotal` sebagai
+`price` `item_details` (dengan `quantity = 1`), bukan `harga_satuan × qty`.
+Midtrans membalas `400` bila jumlah `item_details` tidak sama dengan
+`transaction_details.gross_amount`, dan pada mode `PerArea` / `PerLength` /
+`PerUnit` `subtotal` tidak lagi sama dengan `harga_satuan × qty`.
+
+Qty asli dan ukuran dipindahkan ke `name` item (dipotong 50 karakter). Bila
+jumlahnya tetap tidak sama, `item_details` dilewati supaya transaksi tidak
+gagal `400`. Dijaga oleh `PaymentServices.BuildItemDetails` dan test di
+`tests/Percetakan.Tests/PaymentItemDetailsTests.cs`.
+
 ## 14. Migrasi Database
 
 Fresh install: [`Schema/setup.sql`](../Schema/setup.sql) sudah memuat kolom baru.

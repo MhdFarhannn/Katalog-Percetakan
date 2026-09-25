@@ -23,6 +23,9 @@ namespace Katalog.Services
         // Nama status_pengerjaan saat pembayaran dibatalkan
         private const string PesananDibatalkan = "Dibatalkan";
 
+        // Midtrans membatasi panjang nama item pada 50 karakter.
+        private const int ItemNameMaxLength = 50;
+
         // =========================================================
         // CREATE PAYMENT (SNAP TOKEN)
         //
@@ -134,17 +137,26 @@ namespace Katalog.Services
                 return PaymentResult.Fail("Pesanan sudah dibayar");
             }
 
-            var details = (await conn.QueryAsync<PesananDetailResponse>(
+            // Item memakai subtotal, bukan harga_satuan, karena
+            // subtotal sudah memperhitungkan mode pricing product
+            // (PerArea / PerLength / PerUnit) sedangkan harga_satuan
+            // hanya tarif per satuan. Midtrans menolak request bila
+            // jumlah item_details tidak sama dengan gross_amount.
+            var details = (await conn.QueryAsync<PaymentLineItem>(
                 @"SELECT
                     d.idProduct AS IdProduct,
                     pr.nama AS NamaProduct,
                     d.qty AS Qty,
-                    d.harga_satuan AS HargaSatuan
+                    COALESCE(d.subtotal, d.harga_satuan * d.qty) AS Subtotal,
+                    d.width_m AS WidthMeters,
+                    d.height_m AS HeightMeters,
+                    d.length_m AS LengthMeters
                   FROM Pesanan_Detail d
                   INNER JOIN product pr
                       ON pr.id = d.idProduct
                   WHERE d.idPesanan = @IdPesanan
-                      AND d.deleted_at IS NULL;",
+                      AND d.deleted_at IS NULL
+                  ORDER BY d.id;",
                 new { IdPesanan = idPesanan }))
                 .ToList();
 
@@ -165,17 +177,26 @@ namespace Katalog.Services
                 }
             };
 
-            if (details.Count > 0)
+            var itemDetails = BuildItemDetails(
+                details,
+                pesanan.TotalHarga);
+
+            if (itemDetails != null)
             {
-                snapRequest.ItemDetails = details
-                    .Select(d => new MidtransItemDetails
-                    {
-                        Id = d.IdProduct.ToString(),
-                        Price = d.HargaSatuan,
-                        Quantity = d.Qty,
-                        Name = d.NamaProduct
-                    })
-                    .ToList();
+                snapRequest.ItemDetails = itemDetails;
+            }
+            else if (details.Count > 0)
+            {
+                // Midtrans menolak request bila jumlah item_details
+                // tidak sama dengan gross_amount, jadi item_details
+                // dikosongkan daripada transaksi gagal dengan
+                // status 400.
+                logger.LogWarning(
+                    "Item_details Pesanan {IdPesanan} dilewati: "
+                    + "total item berbeda dengan total pesanan "
+                    + "{TotalHarga}.",
+                    pesanan.Id,
+                    pesanan.TotalHarga);
             }
 
             // Bisa melempar MidtransException
@@ -706,6 +727,23 @@ namespace Katalog.Services
         }
 
         // =========================================================
+        // BARIS PESANAN_DETAIL UNTUK ITEM_DETAILS MIDTRANS
+        //
+        // public agar bisa dipakai unit test lewat
+        // PaymentServices.BuildItemDetails.
+        // =========================================================
+        public sealed class PaymentLineItem
+        {
+            public int IdProduct { get; set; }
+            public string NamaProduct { get; set; } = string.Empty;
+            public int Qty { get; set; }
+            public decimal Subtotal { get; set; }
+            public decimal? WidthMeters { get; set; }
+            public decimal? HeightMeters { get; set; }
+            public decimal? LengthMeters { get; set; }
+        }
+
+        // =========================================================
         // MAP MIDTRANS STATUS KE STATUS INTERNAL
         // =========================================================
         private static string MapPaymentStatus(
@@ -780,6 +818,94 @@ namespace Katalog.Services
                     transaction,
                     payment.IdPesanan);
             }
+        }
+
+        // =========================================================
+        // BUILD ITEM_DETAILS MIDTRANS
+        //
+        // Midtrans menolak request bila jumlah item_details tidak
+        // sama dengan gross_amount, karena itu price memakai
+        // subtotal dengan quantity 1: subtotal sudah memuat mode
+        // pricing product (PerArea / PerLength / PerUnit), sedangkan
+        // harga_satuan hanya tarif per satuan.
+        //
+        // Mengembalikan null bila totalnya tidak sama supaya
+        // item_details dilewati, bukan dikirim lalu ditolak 400.
+        //
+        // public static agar bisa diuji langsung oleh unit test.
+        // =========================================================
+        public static List<MidtransItemDetails>? BuildItemDetails(
+            IReadOnlyCollection<PaymentLineItem> details,
+            decimal grossAmount)
+        {
+            if (details.Count == 0)
+            {
+                return null;
+            }
+
+            var itemTotal = details.Sum(d => d.Subtotal);
+
+            if (itemTotal != grossAmount)
+            {
+                return null;
+            }
+
+            return details
+                .Select(d => new MidtransItemDetails
+                {
+                    Id = d.IdProduct.ToString(),
+                    Price = d.Subtotal,
+                    Quantity = 1,
+                    Name = BuildItemName(d)
+                })
+                .ToList();
+        }
+
+        // =========================================================
+        // NAMA ITEM MIDTRANS
+        //
+        // Midtrans membatasi nama item maksimal 50 karakter, jadi
+        // ukuran & jumlah dipadatkan ke dalam nama.
+        // =========================================================
+        private static string BuildItemName(PaymentLineItem item)
+        {
+            var detail = BuildItemDetail(item);
+
+            var name = detail.Length == 0
+                ? item.NamaProduct
+                : $"{item.NamaProduct} ({detail})";
+
+            return name.Length > ItemNameMaxLength
+                ? name[..ItemNameMaxLength]
+                : name;
+        }
+
+        private static string BuildItemDetail(PaymentLineItem item)
+        {
+            var parts = new List<string>();
+
+            if (item.WidthMeters is > 0 && item.HeightMeters is > 0)
+            {
+                parts.Add(
+                    $"{FormatNumber(item.WidthMeters.Value)}x"
+                    + $"{FormatNumber(item.HeightMeters.Value)} m");
+            }
+            else if (item.LengthMeters is > 0)
+            {
+                parts.Add($"{FormatNumber(item.LengthMeters.Value)} m");
+            }
+
+            if (item.Qty > 1)
+            {
+                parts.Add($"{item.Qty} pcs");
+            }
+
+            return string.Join(", ", parts);
+        }
+
+        private static string FormatNumber(decimal value)
+        {
+            return value.ToString("0.####", CultureInfo.InvariantCulture);
         }
 
         // =========================================================

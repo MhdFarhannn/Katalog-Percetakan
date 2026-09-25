@@ -157,6 +157,11 @@ Format `application/problem+json`:
 }
 ```
 
+> Detail `Midtrans Snap error (400)` berarti payload ditolak Midtrans. Penyebab
+> paling umum: jumlah `item_details` tidak sama dengan `gross_amount`.
+> Backend menyusun `item_details` dari `subtotal` pesanan supaya invariant itu
+> terjaga — rinciannya di [payment.md](payment.md#item-details-yang-dikirim-ke-midtrans).
+
 ## Status Pembayaran
 
 Nilai `paymentStatus` yang mungkin:

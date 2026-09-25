@@ -114,6 +114,26 @@ Membuat transaksi Midtrans Snap untuk pesanan milik user.
 }
 ```
 
+### Item details yang dikirim ke Midtrans
+
+Midtrans menolak permintaan Snap dengan `400` bila
+`transaction_details.gross_amount` **tidak sama** dengan jumlah
+`item_details` (`price × quantity`). Karena itu backend memakai **`subtotal`
+baris pesanan** sebagai `price` dengan `quantity = 1`, bukan
+`harga_satuan × qty`.
+
+Alasannya: sejak mode pricing per product diperkenalkan, `subtotal` tidak lagi
+selalu sama dengan `harga_satuan × qty` — pada mode `PerArea` / `PerLength` /
+`PerUnit`, `harga_satuan` hanya tarif per satuan (lihat
+[pricing-system.md](pricing-system.md)).
+
+- Qty asli dan ukuran (`width_m` / `height_m` / `length_m`) ditulis pada `name`
+  item, karena `quantity` selalu `1`. Nama dipotong 50 karakter sesuai batas
+  Midtrans.
+- Bila total `item_details` tetap tidak sama dengan `Pesanan.total_harga`
+  (mis. data pesanan lama), `item_details` **dilewati** dan transaksi tetap
+  dibuat; kejadian ini dicatat sebagai warning di log, bukan gagal `400`.
+
 ```js
 const res = await fetch(`${API}/api/v1/payment/${idPesanan}`, {
   method: "POST",
